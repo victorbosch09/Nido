@@ -1,0 +1,26 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { AppShell } from "@/components/app-shell";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, avatar_emoji, home_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    // Perfil aún no creado: forzar onboarding completo.
+    redirect("/signup");
+  }
+
+  if (!profile.home_id) {
+    redirect("/onboarding/home");
+  }
+
+  return <AppShell profile={{ name: profile.name, avatar_emoji: profile.avatar_emoji }}>{children}</AppShell>;
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Nido",
+  "short_name": "Nido",
+  "description": "Su hogar compartido, organizado con amor.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#FDF6EE",
+  "theme_color": "#C96A3B",
+  "icons": []
+}
