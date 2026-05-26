@@ -320,18 +320,18 @@ function BudgetLimitsForm({
   return (
     <form onSubmit={submit} className="space-y-3 mb-4 p-4 rounded-2xl bg-bg-main border border-line">
       <p className="text-xs uppercase tracking-wider text-ink-muted">Límite mensual por categoría</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {CATEGORIES.map((c) => {
           const Icon = CATEGORY_ICON[c.value];
           return (
             <label key={c.value} className="flex items-center gap-2.5">
               <span
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                 style={{ background: c.color + "22", color: c.color }}
               >
                 <Icon className="w-4 h-4" strokeWidth={1.8} />
               </span>
-              <span className="text-sm w-24 shrink-0">{c.label}</span>
+              <span className="text-sm flex-1 min-w-0 truncate">{c.label}</span>
               <input
                 type="number"
                 step="1"
@@ -342,7 +342,7 @@ function BudgetLimitsForm({
                   setValues((v) => ({ ...v, [c.value]: e.target.value }))
                 }
                 placeholder="—"
-                className="flex-1 min-w-0 rounded-xl border border-line bg-bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                className="w-28 rounded-xl border border-line bg-bg-card px-3 py-2 font-mono text-sm text-right focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
               />
             </label>
           );
@@ -406,7 +406,7 @@ function NewExpenseForm({
 
   return (
     <form onSubmit={submit} className="space-y-3 mb-4 p-4 rounded-2xl bg-bg-main border border-line">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
           <span className="text-xs text-ink-muted">Monto</span>
           <input

@@ -67,7 +67,7 @@ export function NewTaskForm({ members }: { members: Member[] }) {
         />
       </label>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Select label="Categoría" value={category} onChange={setCategory} options={CATEGORIES} />
         <Select
           label="Prioridad"

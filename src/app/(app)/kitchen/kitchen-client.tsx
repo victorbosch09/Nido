@@ -216,7 +216,7 @@ function NewRecipeForm({ onDone }: { onDone: () => void }) {
           className="mt-1 w-full rounded-xl border border-line bg-bg-card px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
         />
       </label>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <label className="block">
           <span className="text-xs text-ink-muted">Minutos</span>
           <input
