@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingDown, Target, Leaf, X, type LucideIcon } from "lucide-react";
+import { TrendingDown, Target, Leaf, X, Settings2, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { CATEGORY_ICON } from "@/lib/icons";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -44,6 +44,7 @@ export function BudgetClient({
 }: { expenses: Expense[]; budgets: Budget[]; members: Member[]; currentUserId: string }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
+  const [showLimits, setShowLimits] = useState(false);
   const [, startTransition] = useTransition();
 
   const memberById = Object.fromEntries(members.map((m) => [m.id, m]));
@@ -86,15 +87,45 @@ export function BudgetClient({
       </div>
 
       <div className="rounded-3xl border border-line bg-bg-card shadow-warm p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3">
           <h2 className="font-display text-2xl">Por categoría</h2>
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="rounded-full bg-accent-primary text-bg-card px-5 py-2 text-sm font-medium shadow-warm"
-          >
-            {showForm ? "Cerrar" : "+ Gasto"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLimits((s) => !s)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-card px-4 py-2 text-sm text-ink-muted hover:border-accent-soft"
+              aria-label="Configurar límites"
+            >
+              <Settings2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Límites</span>
+            </button>
+            <button
+              onClick={() => setShowForm((s) => !s)}
+              className="rounded-full bg-accent-primary text-bg-card px-5 py-2 text-sm font-medium shadow-warm"
+            >
+              {showForm ? "Cerrar" : "+ Gasto"}
+            </button>
+          </div>
         </div>
+
+        <AnimatePresence>
+          {showLimits && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden"
+            >
+              <BudgetLimitsForm
+                budgets={budgets}
+                onDone={() => {
+                  setShowLimits(false);
+                  startTransition(() => router.refresh());
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {showForm && (
@@ -214,6 +245,128 @@ function SummaryCard({ label, value, icon: Icon }: { label: string; value: strin
       </div>
       <p className="font-display text-3xl mt-2 font-mono">{value}</p>
     </div>
+  );
+}
+
+function BudgetLimitsForm({
+  budgets,
+  onDone,
+}: {
+  budgets: Budget[];
+  onDone: () => void;
+}) {
+  const initial = Object.fromEntries(
+    CATEGORIES.map((c) => [
+      c.value,
+      String(budgets.find((b) => b.category === c.value)?.monthly_limit ?? ""),
+    ]),
+  );
+  const [values, setValues] = useState<Record<string, string>>(initial);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("home_id")
+      .eq("id", user!.id)
+      .single();
+    const homeId = profile!.home_id;
+
+    const toUpsert: { home_id: string; category: string; monthly_limit: number }[] = [];
+    const toDelete: string[] = [];
+    for (const c of CATEGORIES) {
+      const raw = (values[c.value] ?? "").trim();
+      if (raw === "") {
+        toDelete.push(c.value);
+        continue;
+      }
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) {
+        setError(`Monto inválido en ${c.label}`);
+        setLoading(false);
+        return;
+      }
+      toUpsert.push({ home_id: homeId, category: c.value, monthly_limit: n });
+    }
+
+    if (toUpsert.length > 0) {
+      const { error: upErr } = await supabase
+        .from("budgets")
+        .upsert(toUpsert, { onConflict: "home_id,category" });
+      if (upErr) {
+        setError(upErr.message);
+        setLoading(false);
+        return;
+      }
+    }
+    if (toDelete.length > 0) {
+      await supabase
+        .from("budgets")
+        .delete()
+        .eq("home_id", homeId)
+        .in("category", toDelete);
+    }
+
+    setLoading(false);
+    onDone();
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3 mb-4 p-4 rounded-2xl bg-bg-main border border-line">
+      <p className="text-xs uppercase tracking-wider text-ink-muted">Límite mensual por categoría</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {CATEGORIES.map((c) => {
+          const Icon = CATEGORY_ICON[c.value];
+          return (
+            <label key={c.value} className="flex items-center gap-2.5">
+              <span
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: c.color + "22", color: c.color }}
+              >
+                <Icon className="w-4 h-4" strokeWidth={1.8} />
+              </span>
+              <span className="text-sm w-24 shrink-0">{c.label}</span>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                inputMode="decimal"
+                value={values[c.value]}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [c.value]: e.target.value }))
+                }
+                placeholder="—"
+                className="flex-1 min-w-0 rounded-xl border border-line bg-bg-card px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+              />
+            </label>
+          );
+        })}
+      </div>
+      <p className="text-xs text-ink-muted">Vaciá un campo para quitar el límite de esa categoría.</p>
+      {error && <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onDone}
+          className="rounded-full border border-line bg-bg-card px-5 py-2 text-sm"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex-1 rounded-full bg-accent-primary text-bg-card font-medium py-2 text-sm disabled:opacity-50"
+        >
+          {loading ? "Guardando…" : "Guardar límites"}
+        </button>
+      </div>
+    </form>
   );
 }
 

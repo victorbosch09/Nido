@@ -1,6 +1,19 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
+import { RealtimeSync } from "@/components/realtime-sync";
+
+const REALTIME_TABLES = [
+  "tasks",
+  "expenses",
+  "budgets",
+  "grocery_items",
+  "love_notes",
+  "todos",
+  "recipes",
+  "moods",
+  "profiles",
+] as const;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -14,7 +27,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .maybeSingle();
 
   if (!profile) {
-    // Perfil aún no creado: forzar onboarding completo.
     redirect("/signup");
   }
 
@@ -22,5 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/onboarding/home");
   }
 
-  return <AppShell profile={{ name: profile.name, avatar_emoji: profile.avatar_emoji }}>{children}</AppShell>;
+  return (
+    <AppShell profile={{ name: profile.name, avatar_emoji: profile.avatar_emoji }}>
+      <RealtimeSync homeId={profile.home_id} tables={REALTIME_TABLES} />
+      {children}
+    </AppShell>
+  );
 }
