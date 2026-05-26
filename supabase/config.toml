@@ -1,0 +1,31 @@
+# Configuración mínima para Supabase CLI.
+# Proyecto remoto: socuybmkmozbvboiiyav
+# Ejecutá `supabase link --project-ref socuybmkmozbvboiiyav` la primera vez,
+# luego `supabase db push` para aplicar las migraciones de ./migrations.
+
+project_id = "nido"
+
+[db]
+major_version = 15
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = false
+enable_confirmations = false

@@ -37,19 +37,36 @@ src/
     utils.ts
   middleware.ts           # Refresh de sesión + redirects
 supabase/
-  schema.sql              # Schema + RLS + RPCs
+  config.toml             # Config para Supabase CLI
+  schema.sql              # Schema + RLS + RPCs (referencia)
+  migrations/             # Migraciones versionadas (usadas por `supabase db push`)
 ```
 
 ## Setup
 
 ### 1. Supabase
 
-1. Crear proyecto en https://supabase.com (plan free es suficiente para empezar).
-2. En el **SQL Editor**, pegar y ejecutar `supabase/schema.sql`.
-3. En **Authentication → Providers**, asegurate que Email está activado. Si querés evitar confirmación por email durante desarrollo, desactivá "Confirm email" en Auth → Email.
-4. Copiar a `.env.local`:
-   - `NEXT_PUBLIC_SUPABASE_URL` (Settings → API → Project URL)
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Settings → API → anon public key)
+**Proyecto:** `socuybmkmozbvboiiyav` · https://socuybmkmozbvboiiyav.supabase.co
+
+Aplicá el schema con cualquiera de estas dos rutas:
+
+**A) Rápida (SQL Editor)** — abrir https://supabase.com/dashboard/project/socuybmkmozbvboiiyav/sql/new, pegar `supabase/schema.sql` y ejecutar.
+
+**B) Con CLI (recomendado para versionar):**
+```bash
+brew install supabase/tap/supabase   # o el método que uses
+supabase login
+supabase link --project-ref socuybmkmozbvboiiyav
+supabase db push                      # aplica supabase/migrations/*.sql
+```
+
+Luego, en **Authentication → Providers**, asegurate que Email está activado. Para evitar confirmación por email durante desarrollo, desactivá "Confirm email" en Auth → Email.
+
+Las variables ya están en `.env.local` (que está en `.gitignore`). Si necesitás recrearlas:
+```
+NEXT_PUBLIC_SUPABASE_URL=https://socuybmkmozbvboiiyav.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...   # Settings → API
+```
 
 ### 2. Local
 
@@ -63,13 +80,13 @@ Abrir http://localhost:3000.
 
 ### 3. Vercel
 
-1. Importar el repo en https://vercel.com/new
-2. Variables de entorno en Project Settings → Environment Variables:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+1. Importar `victorbosch09/Nido` en https://vercel.com/new
+2. Variables de entorno (Project Settings → Environment Variables, todas las envs):
+   - `NEXT_PUBLIC_SUPABASE_URL=https://socuybmkmozbvboiiyav.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...`
 3. Deploy.
 
-En Supabase → Authentication → URL Configuration, agregá tu URL de Vercel a "Site URL" y "Redirect URLs".
+En Supabase → Authentication → URL Configuration, agregá tu URL de Vercel a "Site URL" y "Redirect URLs" (`https://tu-deploy.vercel.app` y `https://tu-deploy.vercel.app/auth/callback`).
 
 ## Cómo funciona el modelo de pareja
 
