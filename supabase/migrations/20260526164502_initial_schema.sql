@@ -94,7 +94,7 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select exists (
     select 1 from public.profiles
@@ -168,7 +168,7 @@ create or replace function public.join_home_by_code(p_code text)
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_home_id uuid;
@@ -198,7 +198,7 @@ create or replace function public.create_home(p_name text)
 returns uuid
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_home_id uuid;
