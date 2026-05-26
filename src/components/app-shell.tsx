@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Settings as SettingsIcon, MoreHorizontal, X, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { NestLogo } from "@/components/logo";
@@ -58,7 +57,7 @@ export function AppShell({
   return (
     <div className="min-h-screen flex">
       {/* Sidebar (desktop) */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-line bg-bg-card/60 backdrop-blur sticky top-0 h-screen">
+      <aside className="hidden md:flex flex-col w-64 border-r border-line bg-bg-card sticky top-0 h-screen">
         <Link href="/dashboard" prefetch className="px-6 py-6 flex items-center gap-2.5 text-accent-primary">
           <NestLogo size={30} />
           <span className="font-display text-2xl text-ink">Nido</span>
@@ -111,19 +110,13 @@ export function AppShell({
 
       {/* Main */}
       <main className="flex-1 min-w-0 pb-24 md:pb-0">
-        <motion.div
-          key={pathname}
-          initial={{ y: 3 }}
-          animate={{ y: 0 }}
-          transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
-          className="max-w-5xl mx-auto px-5 sm:px-8 py-6 sm:py-10"
-        >
+        <div className="max-w-5xl mx-auto px-5 sm:px-8 py-6 sm:py-10">
           {children}
-        </motion.div>
+        </div>
       </main>
 
       {/* Bottom nav (mobile) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-bg-card/95 backdrop-blur border-t border-line">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-bg-card border-t border-line">
         <div className="grid grid-cols-5 px-2 py-2">
           {PRIMARY.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
@@ -157,30 +150,26 @@ export function AppShell({
         </div>
       </nav>
 
-      {/* More drawer (mobile) */}
-      <AnimatePresence>
-        {moreOpen && (
-          <>
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.12 }}
-              onClick={() => setMoreOpen(false)}
-              className="md:hidden fixed inset-0 bg-black/40 z-40"
-              aria-label="Cerrar"
-            />
-            <motion.div
-              initial={{ y: "100%", opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: 0.18,
-                ease: [0.22, 1, 0.36, 1],
-                opacity: { duration: 0.12 },
-              }}
-              className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-bg-card border-t border-line rounded-t-3xl shadow-warm-lg pb-safe will-change-transform"
-            >
+      {/* More drawer (mobile) - CSS-only transitions, no AnimatePresence to avoid iOS Safari flicker with backdrop+transform */}
+      <button
+        onClick={() => setMoreOpen(false)}
+        aria-label="Cerrar"
+        aria-hidden={!moreOpen}
+        className={cn(
+          "md:hidden fixed inset-0 z-40 bg-black/40 transition-opacity duration-150",
+          moreOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+        )}
+      />
+      <div
+        role="dialog"
+        aria-hidden={!moreOpen}
+        className={cn(
+          "md:hidden fixed bottom-0 inset-x-0 z-50 bg-bg-card border-t border-line rounded-t-3xl shadow-warm-lg pb-4",
+          "transition-transform duration-200 ease-out",
+          moreOpen ? "translate-y-0" : "translate-y-full pointer-events-none",
+        )}
+        style={{ willChange: "transform" }}
+      >
               <div className="flex justify-center pt-2.5 pb-1">
                 <span className="w-10 h-1 rounded-full bg-line" />
               </div>
@@ -241,10 +230,7 @@ export function AppShell({
                   Cerrar sesión
                 </button>
               </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }
