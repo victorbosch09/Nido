@@ -59,8 +59,8 @@ export default function SignupPage() {
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md rounded-3xl bg-bg-card border border-line shadow-warm p-8">
         <Link href="/" className="text-sm text-ink-muted hover:text-accent-primary">← Volver</Link>
-        <h1 className="font-display text-4xl mt-4">Crear tu cuenta 🌱</h1>
-        <p className="text-ink-muted mt-2">El primer paso para construir su nido.</p>
+        <h1 className="font-display text-4xl mt-4">Crear tu cuenta</h1>
+        <p className="text-ink-muted mt-2 leading-relaxed">El primer paso para construir su nido.</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <Field label="Tu nombre" value={name} onChange={setName} required />

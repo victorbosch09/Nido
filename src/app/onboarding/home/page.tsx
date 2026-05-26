@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { NestLogo } from "@/components/logo";
 
 export default function OnboardingHome() {
   const router = useRouter();
@@ -43,7 +44,9 @@ export default function OnboardingHome() {
   return (
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md rounded-3xl bg-bg-card border border-line shadow-warm p-8">
-        <div className="text-5xl text-center">🪺</div>
+        <div className="flex justify-center text-accent-primary">
+          <NestLogo size={56} strokeWidth={1.6} />
+        </div>
         <h1 className="font-display text-4xl text-center mt-4">Su nido</h1>
         <p className="text-center text-ink-muted mt-2">
           Creá un nuevo hogar o unite al de tu pareja con un código.

@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6 max-w-xl">
       <header>
-        <h1 className="font-display text-4xl">Ajustes ⚙️</h1>
+        <h1 className="font-display text-4xl">Ajustes</h1>
         <p className="text-ink-muted mt-1">Tu perfil y tu nido.</p>
       </header>
 

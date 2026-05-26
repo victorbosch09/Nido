@@ -7,10 +7,10 @@ import { createClient } from "@/lib/supabase/client";
 type Member = { id: string; name: string; avatar_emoji: string };
 
 const CATEGORIES = [
-  { value: "cleaning", label: "Limpieza 🧹" },
-  { value: "laundry", label: "Lavandería 👕" },
-  { value: "kitchen", label: "Cocina 🍳" },
-  { value: "general", label: "General 🏠" },
+  { value: "cleaning", label: "Limpieza" },
+  { value: "laundry", label: "Lavandería" },
+  { value: "kitchen", label: "Cocina" },
+  { value: "general", label: "General" },
 ];
 
 export function NewTaskForm({ members }: { members: Member[] }) {

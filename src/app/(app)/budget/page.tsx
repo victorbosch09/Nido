@@ -29,7 +29,7 @@ export default async function BudgetPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-display text-4xl">Presupuesto 💰</h1>
+        <h1 className="font-display text-4xl">Presupuesto</h1>
         <p className="text-ink-muted mt-1 capitalize">{monthLabel}</p>
       </header>
 

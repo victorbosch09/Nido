@@ -3,7 +3,9 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { TrendingDown, Target, Leaf, X, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { CATEGORY_ICON } from "@/lib/icons";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type Expense = {
@@ -18,15 +20,21 @@ type Expense = {
 type Budget = { category: string; monthly_limit: number };
 type Member = { id: string; name: string; avatar_emoji: string };
 
-const CATEGORIES: { value: string; label: string; emoji: string; color: string }[] = [
-  { value: "groceries", label: "Mercado", emoji: "🛒", color: "#4A7C59" },
-  { value: "home", label: "Hogar", emoji: "🏠", color: "#C96A3B" },
-  { value: "personal_care", label: "Cuidado", emoji: "🧴", color: "#E8B4A0" },
-  { value: "eating_out", label: "Restaurantes", emoji: "🍕", color: "#D4A04A" },
-  { value: "fun", label: "Diversión", emoji: "🎉", color: "#8B5CA6" },
-  { value: "health", label: "Salud", emoji: "💊", color: "#5A9DB5" },
-  { value: "repairs", label: "Arreglos", emoji: "🔧", color: "#8A7A6A" },
-  { value: "other", label: "Otro", emoji: "❓", color: "#A8997F" },
+type CategoryDef = {
+  value: keyof typeof CATEGORY_ICON;
+  label: string;
+  color: string;
+};
+
+const CATEGORIES: CategoryDef[] = [
+  { value: "groceries", label: "Mercado", color: "#4A7C59" },
+  { value: "home", label: "Hogar", color: "#C96A3B" },
+  { value: "personal_care", label: "Cuidado", color: "#E8B4A0" },
+  { value: "eating_out", label: "Restaurantes", color: "#D4A04A" },
+  { value: "fun", label: "Diversión", color: "#8B5CA6" },
+  { value: "health", label: "Salud", color: "#5A9DB5" },
+  { value: "repairs", label: "Arreglos", color: "#8A7A6A" },
+  { value: "other", label: "Otro", color: "#A8997F" },
 ];
 
 const CAT = Object.fromEntries(CATEGORIES.map((c) => [c.value, c]));
@@ -64,16 +72,16 @@ export function BudgetClient({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard label="Gastado" value={formatCurrency(total)} emoji="💸" />
+        <SummaryCard label="Gastado" value={formatCurrency(total)} icon={TrendingDown} />
         <SummaryCard
           label="Presupuesto"
           value={totalBudget > 0 ? formatCurrency(totalBudget) : "—"}
-          emoji="🎯"
+          icon={Target}
         />
         <SummaryCard
           label="Restante"
           value={totalBudget > 0 ? formatCurrency(Math.max(0, totalBudget - total)) : "—"}
-          emoji="🌱"
+          icon={Leaf}
         />
       </div>
 
@@ -94,6 +102,7 @@ export function BudgetClient({
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
               className="overflow-hidden"
             >
               <NewExpenseForm
@@ -116,11 +125,17 @@ export function BudgetClient({
             const danger = limit > 0 && spent >= limit;
             const warn = limit > 0 && spent >= limit * 0.8 && !danger;
             if (spent === 0 && limit === 0) return null;
+            const Icon = CATEGORY_ICON[c.value];
             return (
               <div key={c.value}>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2">
-                    <span>{c.emoji}</span>
+                  <span className="flex items-center gap-2.5">
+                    <span
+                      className="w-7 h-7 rounded-lg flex items-center justify-center"
+                      style={{ background: c.color + "22", color: c.color }}
+                    >
+                      <Icon className="w-[15px] h-[15px]" strokeWidth={1.8} />
+                    </span>
                     <span className="font-medium">{c.label}</span>
                   </span>
                   <span className={cn("font-mono", danger ? "text-red-700" : warn ? "text-amber-700" : "text-ink-muted")}>
@@ -129,10 +144,11 @@ export function BudgetClient({
                 </div>
                 <div className="mt-1 h-2 rounded-full bg-bg-main overflow-hidden">
                   <div
-                    className="h-full transition-all"
+                    className="h-full"
                     style={{
                       width: `${limit > 0 ? pct : Math.min(100, (spent / Math.max(1, total)) * 100)}%`,
                       background: danger ? "#C9543B" : warn ? "#D4A04A" : c.color,
+                      transition: "width 240ms ease-out",
                     }}
                   />
                 </div>
@@ -145,15 +161,21 @@ export function BudgetClient({
       <div className="rounded-3xl border border-line bg-bg-card shadow-warm p-5">
         <h2 className="font-display text-2xl mb-4">Movimientos del mes</h2>
         {expenses.length === 0 ? (
-          <p className="text-ink-muted text-center py-8">Aún no hay gastos. ¡Empezá registrando uno! 🌱</p>
+          <p className="text-ink-muted text-center py-8">Aún no hay gastos. Empezá registrando uno.</p>
         ) : (
           <ul className="divide-y divide-line">
             {expenses.map((e) => {
-              const c = CAT[e.category] ?? CAT.other;
+              const c = CAT[e.category as keyof typeof CAT] ?? CAT.other;
+              const Icon = CATEGORY_ICON[c.value];
               const payer = e.paid_by ? memberById[e.paid_by] : null;
               return (
                 <li key={e.id} className="py-3 flex items-center gap-3">
-                  <span className="text-2xl">{c.emoji}</span>
+                  <span
+                    className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: c.color + "22", color: c.color }}
+                  >
+                    <Icon className="w-[18px] h-[18px]" strokeWidth={1.8} />
+                  </span>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">
                       {e.notes || c.label}
@@ -168,10 +190,10 @@ export function BudgetClient({
                   <span className="font-mono font-medium">{formatCurrency(Number(e.amount))}</span>
                   <button
                     onClick={() => remove(e.id)}
-                    className="text-ink-muted hover:text-accent-primary text-sm"
+                    className="text-ink-muted hover:text-accent-primary"
                     aria-label="Eliminar"
                   >
-                    ✕
+                    <X className="w-4 h-4" />
                   </button>
                 </li>
               );
@@ -183,12 +205,12 @@ export function BudgetClient({
   );
 }
 
-function SummaryCard({ label, value, emoji }: { label: string; value: string; emoji: string }) {
+function SummaryCard({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
   return (
     <div className="rounded-3xl border border-line bg-bg-card p-5 shadow-warm">
       <div className="flex items-start justify-between">
         <p className="text-xs uppercase tracking-wider text-ink-muted">{label}</p>
-        <span className="text-2xl">{emoji}</span>
+        <Icon className="w-5 h-5 text-accent-primary" strokeWidth={1.6} aria-hidden />
       </div>
       <p className="font-display text-3xl mt-2 font-mono">{value}</p>
     </div>
@@ -199,7 +221,7 @@ function NewExpenseForm({
   members, currentUserId, onDone,
 }: { members: Member[]; currentUserId: string; onDone: () => void }) {
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("groceries");
+  const [category, setCategory] = useState<CategoryDef["value"]>("groceries");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [paidBy, setPaidBy] = useState(currentUserId);
   const [isShared, setIsShared] = useState(true);
@@ -248,11 +270,11 @@ function NewExpenseForm({
           <span className="text-xs text-ink-muted">Categoría</span>
           <select
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => setCategory(e.target.value as CategoryDef["value"])}
             className="mt-1 w-full rounded-xl border border-line bg-bg-card px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
           >
             {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
         </label>

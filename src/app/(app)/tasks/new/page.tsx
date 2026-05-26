@@ -12,7 +12,7 @@ export default async function NewTaskPage() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="font-display text-4xl">Nueva tarea ✨</h1>
+      <h1 className="font-display text-4xl">Nueva tarea</h1>
       <p className="text-ink-muted mt-1">Sumá una tarea al hogar.</p>
       <div className="mt-6">
         <NewTaskForm members={members ?? []} />

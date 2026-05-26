@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { NestLogo } from "@/components/logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,8 +32,12 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-md rounded-3xl bg-bg-card border border-line shadow-warm p-8">
         <Link href="/" className="text-sm text-ink-muted hover:text-accent-primary">← Volver</Link>
-        <h1 className="font-display text-4xl mt-4">Bienvenidos de vuelta 🪺</h1>
-        <p className="text-ink-muted mt-2">Iniciá sesión para entrar a tu nido.</p>
+        <div className="mt-5 flex items-center gap-2.5 text-accent-primary">
+          <NestLogo size={28} strokeWidth={1.7} />
+          <span className="font-display text-2xl text-ink">Nido</span>
+        </div>
+        <h1 className="font-display text-4xl mt-4">Bienvenidos de vuelta</h1>
+        <p className="text-ink-muted mt-2 leading-relaxed">Iniciá sesión para entrar a tu nido.</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <Field label="Email" type="email" value={email} onChange={setEmail} required />

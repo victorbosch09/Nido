@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { ListTodo, Wallet, ShoppingCart, Heart, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { NestLogo } from "@/components/logo";
 import { dailyQuote, formatCurrency, greetingByTime } from "@/lib/utils";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -65,40 +67,44 @@ export default async function DashboardPage() {
       <header>
         <p className="text-ink-muted text-sm capitalize">{format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}</p>
         <h1 className="font-display text-4xl sm:text-5xl mt-1">{greetingByTime(profile!.name)}</h1>
-        <p className="text-ink-muted mt-2 italic">{dailyQuote()}</p>
+        <p className="text-ink-muted mt-2 italic leading-relaxed">{dailyQuote()}</p>
       </header>
 
       {!partner && (
         <div className="rounded-2xl border border-accent-soft bg-accent-soft/20 p-5">
-          <p className="font-medium">Invitá a tu pareja a {homeName} 🪺</p>
-          <p className="text-sm text-ink-muted mt-1">Compartile este código para que se una al nido:</p>
+          <div className="flex items-center gap-2.5 text-accent-primary">
+            <NestLogo size={22} />
+            <p className="font-medium text-ink">Invitá a tu pareja a {homeName}</p>
+          </div>
+          <p className="text-sm text-ink-muted mt-2">Compartile este código para que se una al nido:</p>
           <p className="mt-3 font-mono text-3xl tracking-widest text-accent-primary">{inviteCode}</p>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card href="/tasks" title="Tareas de hoy" emoji="✅" subtitle={`${pendingCount ?? 0} pendientes`}>
+        <Card href="/tasks" title="Tareas de hoy" icon={ListTodo} subtitle={`${pendingCount ?? 0} pendientes`}>
           {todayTasks && todayTasks.length > 0 ? (
             <ul className="space-y-2 mt-2">
               {todayTasks.map((t) => (
                 <li key={t.id} className="text-sm flex items-center gap-2">
-                  <span className="inline-block w-2 h-2 rounded-full bg-accent-primary" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-primary" />
                   <span className="truncate">{t.title}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-ink-muted mt-2">Sin tareas pendientes hoy. ✨</p>
+            <p className="text-sm text-ink-muted mt-2">Sin tareas pendientes hoy.</p>
           )}
         </Card>
 
-        <Card href="/budget" title={`Presupuesto · ${monthLabel}`} emoji="💰" subtitle={`${pct}% gastado`}>
+        <Card href="/budget" title={`Presupuesto · ${monthLabel}`} icon={Wallet} subtitle={`${pct}% gastado`}>
           <div className="mt-3 h-2 rounded-full bg-bg-main overflow-hidden">
             <div
-              className="h-full transition-all"
+              className="h-full"
               style={{
                 width: `${pct}%`,
                 background: pct < 80 ? "var(--accent-secondary)" : pct < 100 ? "#D4A04A" : "#C9543B",
+                transition: "width 240ms ease-out",
               }}
             />
           </div>
@@ -107,40 +113,42 @@ export default async function DashboardPage() {
           </p>
         </Card>
 
-        <Card href="/groceries" title="Próxima compra" emoji="🛒" subtitle="Lista lista para salir">
-          <p className="text-sm text-ink-muted mt-2">Pronto activamos la despensa inteligente. 🌾</p>
+        <Card href="/groceries" title="Próxima compra" icon={ShoppingCart} subtitle="Lista lista para salir">
+          <p className="text-sm text-ink-muted mt-2">Pronto activamos la despensa inteligente.</p>
         </Card>
 
-        <Card href="/couple" title="Próximo plan" emoji="💑" subtitle="Tiempo juntos">
-          <p className="text-sm text-ink-muted mt-2">Programá su próxima cita en el módulo Pareja. 💕</p>
+        <Card href="/couple" title="Próximo plan" icon={Heart} subtitle="Tiempo juntos">
+          <p className="text-sm text-ink-muted mt-2">Programá su próxima cita en el módulo Pareja.</p>
         </Card>
       </div>
 
       <Link
         href="/tasks/new"
+        prefetch
         className="md:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-accent-primary text-bg-card text-2xl shadow-warm-lg flex items-center justify-center"
         aria-label="Agregar"
       >
-        ＋
+        +
       </Link>
     </div>
   );
 }
 
 function Card({
-  href, title, emoji, subtitle, children,
-}: { href: string; title: string; emoji: string; subtitle: string; children: React.ReactNode }) {
+  href, title, icon: Icon, subtitle, children,
+}: { href: string; title: string; icon: LucideIcon; subtitle: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}
-      className="block rounded-3xl bg-bg-card border border-line shadow-warm p-5 hover:shadow-warm-lg transition"
+      prefetch
+      className="block rounded-3xl bg-bg-card border border-line shadow-warm p-5 hover:shadow-warm-lg"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider text-ink-muted">{title}</p>
           <p className="font-display text-2xl mt-1">{subtitle}</p>
         </div>
-        <span className="text-3xl" aria-hidden>{emoji}</span>
+        <Icon className="w-7 h-7 text-accent-primary shrink-0" strokeWidth={1.6} aria-hidden />
       </div>
       <div>{children}</div>
     </Link>
