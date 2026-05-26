@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/page-header";
 import { GroceriesClient } from "./groceries-client";
 
 export default async function GroceriesPage() {
@@ -23,12 +24,10 @@ export default async function GroceriesPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-4xl">Despensa</h1>
-        <p className="text-ink-muted mt-1 leading-relaxed">
-          Lista compartida — agregá y marcá en tiempo real.
-        </p>
-      </header>
+      <PageHeader
+        title="Despensa"
+        subtitle="Lista compartida — agregá y marcá en tiempo real."
+      />
       <GroceriesClient
         items={items ?? []}
         members={members ?? []}

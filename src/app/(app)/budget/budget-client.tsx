@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingDown, Target, Leaf, X, Settings2, type LucideIcon } from "lucide-react";
+import { TrendingDown, Target, Leaf, X, Settings2, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
 import { CATEGORY_ICON } from "@/lib/icons";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -40,12 +42,30 @@ const CATEGORIES: CategoryDef[] = [
 const CAT = Object.fromEntries(CATEGORIES.map((c) => [c.value, c]));
 
 export function BudgetClient({
-  expenses, budgets, members, currentUserId,
-}: { expenses: Expense[]; budgets: Budget[]; members: Member[]; currentUserId: string }) {
+  expenses: serverExpenses,
+  budgets,
+  members,
+  currentUserId,
+  monthKey,
+  prevMonthKey,
+  nextMonthKey,
+}: {
+  expenses: Expense[];
+  budgets: Budget[];
+  members: Member[];
+  currentUserId: string;
+  monthKey: string;
+  prevMonthKey: string;
+  nextMonthKey: string;
+}) {
   const router = useRouter();
+  const [expenses, setExpenses] = useState<Expense[]>(serverExpenses);
   const [showForm, setShowForm] = useState(false);
   const [showLimits, setShowLimits] = useState(false);
   const [, startTransition] = useTransition();
+
+  // Re-sync local state on server refresh
+  useEffect(() => setExpenses(serverExpenses), [serverExpenses]);
 
   const memberById = Object.fromEntries(members.map((m) => [m.id, m]));
 
@@ -63,15 +83,68 @@ export function BudgetClient({
   const totalBudget = budgets.reduce((s, b) => s + Number(b.monthly_limit), 0);
   const budgetByCategory = Object.fromEntries(budgets.map((b) => [b.category, Number(b.monthly_limit)]));
 
-  async function remove(id: string) {
-    if (!confirm("¿Eliminar este gasto?")) return;
+  async function remove(expense: Expense) {
+    setExpenses((arr) => arr.filter((e) => e.id !== expense.id));
     const supabase = createClient();
-    await supabase.from("expenses").delete().eq("id", id);
+    const { error } = await supabase.from("expenses").delete().eq("id", expense.id);
+    if (error) {
+      setExpenses((arr) => [expense, ...arr]);
+      toast.error("No se pudo eliminar");
+      return;
+    }
+    toast({
+      title: `Gasto eliminado`,
+      description: formatCurrency(Number(expense.amount)),
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("home_id")
+            .eq("id", currentUserId)
+            .single();
+          await supabase.from("expenses").insert({
+            id: expense.id,
+            home_id: profile!.home_id,
+            amount: expense.amount,
+            category: expense.category,
+            paid_by: expense.paid_by,
+            date: expense.date,
+            is_shared: expense.is_shared,
+            notes: expense.notes,
+          });
+          startTransition(() => router.refresh());
+        },
+      },
+    });
     startTransition(() => router.refresh());
   }
 
   return (
     <div className="space-y-6">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between">
+        <Link
+          href={`/budget?month=${prevMonthKey}`}
+          prefetch
+          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-card px-4 py-2 text-sm text-ink-muted hover:border-accent-soft"
+          aria-label="Mes anterior"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span className="hidden sm:inline font-mono">{prevMonthKey}</span>
+        </Link>
+        <p className="font-mono text-sm text-ink-muted">{monthKey}</p>
+        <Link
+          href={`/budget?month=${nextMonthKey}`}
+          prefetch
+          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-card px-4 py-2 text-sm text-ink-muted hover:border-accent-soft"
+          aria-label="Mes siguiente"
+        >
+          <span className="hidden sm:inline font-mono">{nextMonthKey}</span>
+          <ChevronRight className="w-4 h-4" />
+        </Link>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SummaryCard label="Gastado" value={formatCurrency(total)} icon={TrendingDown} />
         <SummaryCard
@@ -220,7 +293,7 @@ export function BudgetClient({
                   </div>
                   <span className="font-mono font-medium">{formatCurrency(Number(e.amount))}</span>
                   <button
-                    onClick={() => remove(e.id)}
+                    onClick={() => remove(e)}
                     className="text-ink-muted hover:text-accent-primary"
                     aria-label="Eliminar"
                   >
@@ -314,6 +387,7 @@ function BudgetLimitsForm({
     }
 
     setLoading(false);
+    toast.success("Límites guardados");
     onDone();
   }
 
@@ -389,7 +463,7 @@ function NewExpenseForm({
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from("profiles").select("home_id").eq("id", user!.id).single();
-    await supabase.from("expenses").insert({
+    const { error } = await supabase.from("expenses").insert({
       home_id: profile!.home_id,
       amount: num,
       category,
@@ -401,6 +475,11 @@ function NewExpenseForm({
     setAmount("");
     setNotes("");
     setLoading(false);
+    if (error) {
+      toast.error("No se pudo guardar");
+      return;
+    }
+    toast.success("Gasto agregado");
     onDone();
   }
 

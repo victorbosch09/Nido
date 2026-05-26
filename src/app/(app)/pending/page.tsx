@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/page-header";
 import { PendingClient } from "./pending-client";
 
 export default async function PendingPage() {
@@ -14,7 +15,7 @@ export default async function PendingPage() {
   const [{ data: todos }, { data: members }] = await Promise.all([
     supabase
       .from("todos")
-      .select("id, title, description, status, urgency, assigned_to, created_by, created_at, completed_at")
+      .select("id, title, description, status, urgency, assigned_to, created_by, created_at, completed_at, due_date")
       .eq("home_id", homeId)
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id, name, avatar_emoji").eq("home_id", homeId),
@@ -22,12 +23,10 @@ export default async function PendingPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-4xl">Pendientes</h1>
-        <p className="text-ink-muted mt-1 leading-relaxed">
-          Trámites, arreglos y cosas one-shot. Movélas por su flujo.
-        </p>
-      </header>
+      <PageHeader
+        title="Pendientes"
+        subtitle="Trámites, arreglos y cosas one-shot. Movélas por su flujo."
+      />
       <PendingClient
         todos={todos ?? []}
         members={members ?? []}

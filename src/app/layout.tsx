@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Playfair_Display, DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@/components/toast";
+import { PWAInstallPrompt } from "@/components/pwa-install";
+import { ThemeScript } from "@/components/theme-toggle";
 
 const display = Playfair_Display({ subsets: ["latin"], variable: "--font-display", display: "swap" });
 const sans = DM_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -21,8 +24,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+      <head>
+        <ThemeScript />
+      </head>
       <body className="min-h-screen">
         <div className="relative z-10">{children}</div>
+        <Toaster />
+        <PWAInstallPrompt />
       </body>
     </html>
   );

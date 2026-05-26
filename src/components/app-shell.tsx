@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Settings as SettingsIcon, MoreHorizontal, X, type LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +38,11 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Close drawer automatically on route change (no manual close needed on click)
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -108,9 +113,9 @@ export function AppShell({
       <main className="flex-1 min-w-0 pb-24 md:pb-0">
         <motion.div
           key={pathname}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+          initial={{ y: 3 }}
+          animate={{ y: 0 }}
+          transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
           className="max-w-5xl mx-auto px-5 sm:px-8 py-6 sm:py-10"
         >
           {children}
@@ -160,17 +165,21 @@ export function AppShell({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
+              transition={{ duration: 0.12 }}
               onClick={() => setMoreOpen(false)}
               className="md:hidden fixed inset-0 bg-black/40 z-40"
               aria-label="Cerrar"
             />
             <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-              className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-bg-card border-t border-line rounded-t-3xl shadow-warm-lg pb-safe"
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.18,
+                ease: [0.22, 1, 0.36, 1],
+                opacity: { duration: 0.12 },
+              }}
+              className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-bg-card border-t border-line rounded-t-3xl shadow-warm-lg pb-safe will-change-transform"
             >
               <div className="flex justify-center pt-2.5 pb-1">
                 <span className="w-10 h-1 rounded-full bg-line" />
@@ -195,7 +204,6 @@ export function AppShell({
                       key={item.href}
                       href={item.href}
                       prefetch
-                      onClick={() => setMoreOpen(false)}
                       className={cn(
                         "flex items-center gap-3 p-4 rounded-2xl border",
                         active
@@ -214,7 +222,6 @@ export function AppShell({
                 <Link
                   href="/settings"
                   prefetch
-                  onClick={() => setMoreOpen(false)}
                   className="w-full flex items-center gap-3 p-3 rounded-xl bg-bg-main border border-line text-ink"
                 >
                   <SettingsIcon className="w-5 h-5 shrink-0" strokeWidth={1.8} />

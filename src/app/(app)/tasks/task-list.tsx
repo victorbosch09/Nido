@@ -1,10 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X } from "lucide-react";
+import { Check, X, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
+import { Segmented } from "@/components/segmented";
 import { CATEGORY_ICON, type IconName } from "@/lib/icons";
 import { cn } from "@/lib/utils";
 
@@ -32,66 +34,141 @@ function getCategoryIcon(category: string) {
   return CATEGORY_ICON[category as IconName] ?? CATEGORY_ICON.general;
 }
 
+type Filter = "all" | "mine" | "pending" | "done";
+
 export function TaskList({
-  tasks, members, currentUserId,
+  tasks: serverTasks,
+  members,
+  currentUserId,
 }: { tasks: Task[]; members: Member[]; currentUserId: string }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [filter, setFilter] = useState<"all" | "mine" | "pending" | "done">("all");
+  const [, startTransition] = useTransition();
+  const [tasks, setTasks] = useState<Task[]>(serverTasks);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+
+  // Re-sync local state on server refresh (after router.refresh)
+  useEffect(() => setTasks(serverTasks), [serverTasks]);
 
   const memberById = Object.fromEntries(members.map((m) => [m.id, m]));
 
-  const filtered = tasks.filter((t) => {
-    if (filter === "mine") return t.assigned_to === currentUserId;
-    if (filter === "pending") return t.status === "pending";
-    if (filter === "done") return t.status === "done";
-    return true;
-  });
+  const counts = useMemo(
+    () => ({
+      all: tasks.length,
+      mine: tasks.filter((t) => t.assigned_to === currentUserId).length,
+      pending: tasks.filter((t) => t.status === "pending").length,
+      done: tasks.filter((t) => t.status === "done").length,
+    }),
+    [tasks, currentUserId],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tasks.filter((t) => {
+      if (filter === "mine" && t.assigned_to !== currentUserId) return false;
+      if (filter === "pending" && t.status !== "pending") return false;
+      if (filter === "done" && t.status !== "done") return false;
+      if (q && !t.title.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [tasks, filter, query, currentUserId]);
 
   async function toggle(task: Task) {
+    const newStatus = task.status === "pending" ? "done" : "pending";
+    const completed_at = newStatus === "done" ? new Date().toISOString() : null;
+    const completed_by = newStatus === "done" ? currentUserId : null;
+
+    // Optimistic
+    setTasks((arr) =>
+      arr.map((t) =>
+        t.id === task.id ? { ...t, status: newStatus, completed_at } : t,
+      ),
+    );
+
     const supabase = createClient();
-    if (task.status === "pending") {
-      await supabase
-        .from("tasks")
-        .update({ status: "done", completed_at: new Date().toISOString(), completed_by: currentUserId })
-        .eq("id", task.id);
-    } else {
-      await supabase
-        .from("tasks")
-        .update({ status: "pending", completed_at: null, completed_by: null })
-        .eq("id", task.id);
+    const { error } = await supabase
+      .from("tasks")
+      .update({ status: newStatus, completed_at, completed_by })
+      .eq("id", task.id);
+
+    if (error) {
+      // Rollback
+      setTasks((arr) => arr.map((t) => (t.id === task.id ? task : t)));
+      toast.error("No se pudo actualizar");
+      return;
     }
     startTransition(() => router.refresh());
   }
 
   async function remove(task: Task) {
-    if (!confirm(`¿Eliminar "${task.title}"?`)) return;
+    // Optimistic
+    setTasks((arr) => arr.filter((t) => t.id !== task.id));
+
     const supabase = createClient();
-    await supabase.from("tasks").delete().eq("id", task.id);
+    const { error } = await supabase.from("tasks").delete().eq("id", task.id);
+    if (error) {
+      setTasks((arr) => [task, ...arr]);
+      toast.error("No se pudo eliminar");
+      return;
+    }
+
+    toast({
+      title: `"${task.title}" eliminada`,
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          const { error: insErr } = await supabase.from("tasks").insert({
+            id: task.id,
+            home_id: (await supabase.from("profiles").select("home_id").eq("id", currentUserId).single()).data?.home_id,
+            title: task.title,
+            description: task.description,
+            category: task.category,
+            priority: task.priority,
+            recurrence: task.recurrence,
+            status: task.status,
+            due_date: task.due_date,
+            assigned_to: task.assigned_to,
+            completed_at: task.completed_at,
+          });
+          if (!insErr) {
+            setTasks((arr) => [task, ...arr]);
+            startTransition(() => router.refresh());
+          }
+        },
+      },
+    });
     startTransition(() => router.refresh());
   }
 
   return (
     <div>
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {(["all", "mine", "pending", "done"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cn(
-              "rounded-full px-4 py-1.5 text-sm border",
-              filter === f
-                ? "bg-accent-primary text-bg-card border-accent-primary"
-                : "bg-bg-card border-line text-ink-muted hover:border-accent-soft",
-            )}
-          >
-            {{ all: "Todas", mine: "Mías", pending: "Pendientes", done: "Hechas" }[f]}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <Segmented<Filter>
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "all", label: "Todas", count: counts.all },
+            { value: "mine", label: "Mías", count: counts.mine },
+            { value: "pending", label: "Pendientes", count: counts.pending },
+            { value: "done", label: "Hechas", count: counts.done },
+          ]}
+        />
+      </div>
+
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar tarea…"
+          className="w-full pl-10 pr-3 py-2.5 rounded-2xl border border-line bg-bg-card text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+        />
       </div>
 
       {filtered.length === 0 ? (
-        <p className="text-ink-muted text-center py-12">No hay tareas en esta vista.</p>
+        <p className="text-ink-muted text-center py-12">
+          {query ? "Nada coincide con la búsqueda." : "No hay tareas en esta vista."}
+        </p>
       ) : (
         <ul className="space-y-3">
           <AnimatePresence initial={false}>
@@ -113,7 +190,6 @@ export function TaskList({
                 >
                   <button
                     onClick={() => toggle(t)}
-                    disabled={isPending}
                     aria-label={done ? "Marcar pendiente" : "Marcar hecha"}
                     className={cn(
                       "w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0",

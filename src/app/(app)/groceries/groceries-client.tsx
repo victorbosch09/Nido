@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Plus, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
 type Item = {
@@ -40,7 +41,7 @@ const CAT_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 export function GroceriesClient({
-  items,
+  items: serverItems,
   members,
   currentUserId,
 }: {
@@ -50,12 +51,28 @@ export function GroceriesClient({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [items, setItems] = useState<Item[]>(serverItems);
   const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => setItems(serverItems), [serverItems]);
 
   const memberById = Object.fromEntries(members.map((m) => [m.id, m]));
 
   const pending = useMemo(() => items.filter((i) => !i.is_done), [items]);
   const done = useMemo(() => items.filter((i) => i.is_done), [items]);
+
+  // Past names for autocomplete (unique, recent first)
+  const pastNames = useMemo(() => {
+    const seen = new Set<string>();
+    const names: { name: string; category: string; unit: string | null }[] = [];
+    for (const item of items) {
+      const key = item.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      names.push({ name: item.name, category: item.category, unit: item.unit });
+    }
+    return names;
+  }, [items]);
 
   const groupedPending = useMemo(() => {
     const map = new Map<string, Item[]>();
@@ -68,28 +85,82 @@ export function GroceriesClient({
   }, [pending]);
 
   async function toggle(item: Item) {
+    const newDone = !item.is_done;
+    // Optimistic
+    setItems((arr) =>
+      arr.map((i) =>
+        i.id === item.id
+          ? {
+              ...i,
+              is_done: newDone,
+              done_at: newDone ? new Date().toISOString() : null,
+              done_by: newDone ? currentUserId : null,
+            }
+          : i,
+      ),
+    );
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("grocery_items")
       .update({
-        is_done: !item.is_done,
-        done_at: !item.is_done ? new Date().toISOString() : null,
-        done_by: !item.is_done ? currentUserId : null,
+        is_done: newDone,
+        done_at: newDone ? new Date().toISOString() : null,
+        done_by: newDone ? currentUserId : null,
       })
       .eq("id", item.id);
+    if (error) {
+      setItems((arr) => arr.map((i) => (i.id === item.id ? item : i)));
+      toast.error("No se pudo actualizar");
+      return;
+    }
     startTransition(() => router.refresh());
   }
 
-  async function remove(id: string) {
+  async function remove(item: Item) {
+    setItems((arr) => arr.filter((i) => i.id !== item.id));
     const supabase = createClient();
-    await supabase.from("grocery_items").delete().eq("id", id);
+    const { error } = await supabase.from("grocery_items").delete().eq("id", item.id);
+    if (error) {
+      setItems((arr) => [item, ...arr]);
+      toast.error("No se pudo eliminar");
+      return;
+    }
+    toast({
+      title: `"${item.name}" eliminado`,
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("home_id")
+            .eq("id", currentUserId)
+            .single();
+          await supabase.from("grocery_items").insert({
+            id: item.id,
+            home_id: profile!.home_id,
+            name: item.name,
+            qty: item.qty,
+            unit: item.unit,
+            category: item.category,
+            is_done: item.is_done,
+            notes: item.notes,
+            added_by: item.added_by,
+          });
+          startTransition(() => router.refresh());
+        },
+      },
+    });
     startTransition(() => router.refresh());
   }
 
   async function clearDone() {
-    if (!confirm("¿Limpiar todos los items comprados?")) return;
+    const removed = done;
+    setItems((arr) => arr.filter((i) => !i.is_done));
     const supabase = createClient();
     await supabase.from("grocery_items").delete().eq("is_done", true);
+    toast({
+      title: `${removed.length} ${removed.length === 1 ? "item" : "items"} retirados`,
+    });
     startTransition(() => router.refresh());
   }
 
@@ -120,6 +191,7 @@ export function GroceriesClient({
           >
             <NewItemForm
               currentUserId={currentUserId}
+              suggestions={pastNames}
               onDone={() => {
                 setShowForm(false);
                 startTransition(() => router.refresh());
@@ -154,7 +226,7 @@ export function GroceriesClient({
                       item={item}
                       adder={item.added_by ? memberById[item.added_by] : null}
                       onToggle={() => toggle(item)}
-                      onRemove={() => remove(item.id)}
+                      onRemove={() => remove(item)}
                     />
                   ))}
                 </AnimatePresence>
@@ -183,7 +255,7 @@ export function GroceriesClient({
                       item={item}
                       adder={item.done_by ? memberById[item.done_by] : null}
                       onToggle={() => toggle(item)}
-                      onRemove={() => remove(item.id)}
+                      onRemove={() => remove(item)}
                     />
                   ))}
                 </AnimatePresence>
@@ -262,9 +334,11 @@ function GroceryRow({
 
 function NewItemForm({
   currentUserId,
+  suggestions,
   onDone,
 }: {
   currentUserId: string;
+  suggestions: { name: string; category: string; unit: string | null }[];
   onDone: () => void;
 }) {
   const [name, setName] = useState("");
@@ -273,6 +347,20 @@ function NewItemForm({
   const [category, setCategory] = useState("general");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const matches = useMemo(() => {
+    const q = name.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return suggestions
+      .filter((s) => s.name.toLowerCase().includes(q) && s.name.toLowerCase() !== q)
+      .slice(0, 5);
+  }, [name, suggestions]);
+
+  function pick(s: { name: string; category: string; unit: string | null }) {
+    setName(s.name);
+    setCategory(s.category);
+    if (s.unit) setUnit(s.unit);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -285,7 +373,7 @@ function NewItemForm({
       .select("home_id")
       .eq("id", user!.id)
       .single();
-    await supabase.from("grocery_items").insert({
+    const { error } = await supabase.from("grocery_items").insert({
       home_id: profile!.home_id,
       name: name.trim(),
       qty: qty.trim() ? Number(qty) : null,
@@ -294,27 +382,52 @@ function NewItemForm({
       notes: notes.trim() || null,
       added_by: currentUserId,
     });
+    setLoading(false);
+    if (error) {
+      toast.error("No se pudo agregar");
+      return;
+    }
     setName("");
     setQty("");
     setUnit("");
     setNotes("");
-    setLoading(false);
+    toast.success(`"${name.trim()}" agregado`);
     onDone();
   }
 
   return (
     <form onSubmit={submit} className="space-y-3 p-4 rounded-2xl bg-bg-main border border-line">
-      <label className="block">
-        <span className="text-xs text-ink-muted">Item</span>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoFocus
-          placeholder="Ej: tomates"
-          required
-          className="mt-1 w-full rounded-xl border border-line bg-bg-card px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
-        />
-      </label>
+      <div className="relative">
+        <label className="block">
+          <span className="text-xs text-ink-muted">Item</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+            placeholder="Ej: tomates"
+            required
+            autoComplete="off"
+            className="mt-1 w-full rounded-xl border border-line bg-bg-card px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+          />
+        </label>
+        {matches.length > 0 && (
+          <div className="absolute z-10 left-0 right-0 mt-1 rounded-xl border border-line bg-bg-card shadow-warm overflow-hidden">
+            {matches.map((s) => (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => pick(s)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-accent-soft/20 flex items-center justify-between"
+              >
+                <span>{s.name}</span>
+                <span className="text-xs text-ink-muted">
+                  {CAT_LABEL[s.category] ?? s.category}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <label className="block">
           <span className="text-xs text-ink-muted">Cantidad</span>

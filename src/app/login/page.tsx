@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { NestLogo } from "@/components/logo";
+import { toast } from "@/components/toast";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+    toast.success("Bienvenido de vuelta");
     router.push("/dashboard");
     router.refresh();
   }

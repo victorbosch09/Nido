@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ListTodo, Wallet, CheckCircle2, type LucideIcon } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays, eachDayOfInterval } from "date-fns";
+import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
 import { formatCurrency, cn } from "@/lib/utils";
 
 type Mood = { date: string; score: number };
@@ -16,6 +18,15 @@ const MOODS: { score: number; label: string; emoji: string }[] = [
   { score: 3, label: "Neutro", emoji: "😐" },
   { score: 4, label: "Bien", emoji: "🙂" },
   { score: 5, label: "Genial", emoji: "😄" },
+];
+
+const MOOD_COLORS = [
+  "bg-bg-main border border-line", // 0 = no data
+  "bg-red-200/70",                  // 1
+  "bg-amber-200/70",                // 2
+  "bg-yellow-200/70",               // 3
+  "bg-emerald-200/80",              // 4
+  "bg-emerald-400/80",              // 5
 ];
 
 export function MeClient({
@@ -43,12 +54,24 @@ export function MeClient({
   const [notes, setNotes] = useState(todayMood?.notes ?? "");
   const [saving, setSaving] = useState(false);
 
+  // 30-day calendar: each cell is a day with a score (or 0 if no data)
+  const heatmap = useMemo(() => {
+    const today = new Date();
+    const start = subDays(today, 29);
+    const days = eachDayOfInterval({ start, end: today });
+    const byDate = new Map(recentMoods.map((m) => [m.date, m.score]));
+    return days.map((d) => {
+      const key = format(d, "yyyy-MM-dd");
+      return { date: key, score: byDate.get(key) ?? 0, label: format(d, "d MMM", { locale: es }) };
+    });
+  }, [recentMoods]);
+
   async function saveMood(newScore: number) {
     setSaving(true);
     setScore(newScore);
     const supabase = createClient();
     const today = format(new Date(), "yyyy-MM-dd");
-    await supabase
+    const { error } = await supabase
       .from("moods")
       .upsert(
         {
@@ -61,6 +84,11 @@ export function MeClient({
         { onConflict: "profile_id,date" },
       );
     setSaving(false);
+    if (error) {
+      toast.error("No se pudo guardar");
+      return;
+    }
+    toast.success(`Registrado: ${MOODS.find((m) => m.score === newScore)?.label}`);
     startTransition(() => router.refresh());
   }
 
@@ -126,24 +154,28 @@ export function MeClient({
           </label>
         )}
 
-        {recentMoods.length > 1 && (
-          <div className="mt-5">
-            <p className="text-xs uppercase tracking-wider text-ink-muted">Últimos 14 días</p>
-            <div className="mt-2 flex items-end gap-1 h-12">
-              {recentMoods.map((m) => {
-                const h = (m.score / 5) * 100;
-                return (
-                  <div
-                    key={m.date}
-                    className="flex-1 rounded-t bg-accent-primary/60"
-                    style={{ height: `${h}%` }}
-                    title={`${m.date}: ${m.score}/5`}
-                  />
-                );
-              })}
+        {/* 30-day heatmap */}
+        <div className="mt-6">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wider text-ink-muted">Últimos 30 días</p>
+            <div className="flex items-center gap-1.5 text-[10px] text-ink-muted">
+              <span>menos</span>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <span key={n} className={cn("w-2.5 h-2.5 rounded-sm", MOOD_COLORS[n])} />
+              ))}
+              <span>más</span>
             </div>
           </div>
-        )}
+          <div className="mt-3 grid grid-cols-10 gap-1.5">
+            {heatmap.map((d) => (
+              <div
+                key={d.date}
+                title={`${d.label}: ${d.score > 0 ? MOODS.find((m) => m.score === d.score)?.label : "sin registro"}`}
+                className={cn("aspect-square rounded", MOOD_COLORS[d.score])}
+              />
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Mi balance */}

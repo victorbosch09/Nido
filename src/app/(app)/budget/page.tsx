@@ -1,16 +1,32 @@
 import { createClient } from "@/lib/supabase/server";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { startOfMonth, endOfMonth, format, addMonths, subMonths, parse, isValid } from "date-fns";
 import { es } from "date-fns/locale";
+import { PageHeader } from "@/components/page-header";
 import { BudgetClient } from "./budget-client";
 
-export default async function BudgetPage() {
+export default async function BudgetPage({
+  searchParams,
+}: {
+  searchParams?: { month?: string };
+}) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const { data: profile } = await supabase.from("profiles").select("home_id").eq("id", user!.id).single();
   const homeId = profile!.home_id as string;
 
-  const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
-  const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd");
+  // Parse ?month=YYYY-MM (default current)
+  let monthDate = new Date();
+  if (searchParams?.month) {
+    const parsed = parse(searchParams.month, "yyyy-MM", new Date());
+    if (isValid(parsed)) monthDate = parsed;
+  }
+
+  const monthStart = format(startOfMonth(monthDate), "yyyy-MM-dd");
+  const monthEnd = format(endOfMonth(monthDate), "yyyy-MM-dd");
+  const monthKey = format(monthDate, "yyyy-MM");
+  const prevMonthKey = format(subMonths(monthDate, 1), "yyyy-MM");
+  const nextMonthKey = format(addMonths(monthDate, 1), "yyyy-MM");
+  const monthLabel = format(monthDate, "MMMM yyyy", { locale: es });
 
   const [{ data: expenses }, { data: budgets }, { data: members }] = await Promise.all([
     supabase
@@ -24,20 +40,17 @@ export default async function BudgetPage() {
     supabase.from("profiles").select("id, name, avatar_emoji").eq("home_id", homeId),
   ]);
 
-  const monthLabel = format(new Date(), "MMMM yyyy", { locale: es });
-
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-4xl">Presupuesto</h1>
-        <p className="text-ink-muted mt-1 capitalize">{monthLabel}</p>
-      </header>
-
+      <PageHeader title="Presupuesto" subtitle={monthLabel} />
       <BudgetClient
         expenses={expenses ?? []}
         budgets={budgets ?? []}
         members={members ?? []}
         currentUserId={user!.id}
+        monthKey={monthKey}
+        prevMonthKey={prevMonthKey}
+        nextMonthKey={nextMonthKey}
       />
     </div>
   );

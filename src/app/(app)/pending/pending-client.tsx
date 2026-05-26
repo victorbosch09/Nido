@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, ChevronRight, ChevronLeft } from "lucide-react";
+import { Plus, X, ChevronRight, ChevronLeft, Calendar as CalendarIcon, AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
 type Status = "pending" | "in_progress" | "done";
@@ -20,6 +21,7 @@ type Todo = {
   created_by: string | null;
   created_at: string;
   completed_at: string | null;
+  due_date: string | null;
 };
 type Member = { id: string; name: string; avatar_emoji: string };
 
@@ -52,8 +54,15 @@ const PREV_STATUS: Record<Status, Status | null> = {
   done: "in_progress",
 };
 
+function isOverdue(t: Todo) {
+  if (t.status === "done") return false;
+  if (!t.due_date) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return t.due_date < today;
+}
+
 export function PendingClient({
-  todos,
+  todos: serverTodos,
   members,
   currentUserId,
 }: {
@@ -63,7 +72,10 @@ export function PendingClient({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [todos, setTodos] = useState<Todo[]>(serverTodos);
   const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => setTodos(serverTodos), [serverTodos]);
 
   const memberById = Object.fromEntries(members.map((m) => [m.id, m]));
 
@@ -76,20 +88,67 @@ export function PendingClient({
   async function move(todo: Todo, dir: "prev" | "next") {
     const target = dir === "next" ? NEXT_STATUS[todo.status] : PREV_STATUS[todo.status];
     if (!target) return;
+    setTodos((arr) =>
+      arr.map((t) =>
+        t.id === todo.id
+          ? {
+              ...t,
+              status: target,
+              completed_at: target === "done" ? new Date().toISOString() : null,
+            }
+          : t,
+      ),
+    );
     const supabase = createClient();
-    await supabase
+    const { error } = await supabase
       .from("todos")
       .update({
         status: target,
         completed_at: target === "done" ? new Date().toISOString() : null,
       })
       .eq("id", todo.id);
+    if (error) {
+      setTodos((arr) => arr.map((t) => (t.id === todo.id ? todo : t)));
+      toast.error("No se pudo mover");
+      return;
+    }
     startTransition(() => router.refresh());
   }
 
-  async function remove(id: string) {
+  async function remove(todo: Todo) {
+    setTodos((arr) => arr.filter((t) => t.id !== todo.id));
     const supabase = createClient();
-    await supabase.from("todos").delete().eq("id", id);
+    const { error } = await supabase.from("todos").delete().eq("id", todo.id);
+    if (error) {
+      setTodos((arr) => [todo, ...arr]);
+      toast.error("No se pudo eliminar");
+      return;
+    }
+    toast({
+      title: `"${todo.title}" eliminado`,
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("home_id")
+            .eq("id", currentUserId)
+            .single();
+          await supabase.from("todos").insert({
+            id: todo.id,
+            home_id: profile!.home_id,
+            title: todo.title,
+            description: todo.description,
+            status: todo.status,
+            urgency: todo.urgency,
+            assigned_to: todo.assigned_to,
+            created_by: todo.created_by,
+            due_date: todo.due_date,
+          });
+          startTransition(() => router.refresh());
+        },
+      },
+    });
     startTransition(() => router.refresh());
   }
 
@@ -147,6 +206,7 @@ export function PendingClient({
                     const assignee = t.assigned_to ? memberById[t.assigned_to] : null;
                     const next = NEXT_STATUS[t.status];
                     const prev = PREV_STATUS[t.status];
+                    const overdue = isOverdue(t);
                     return (
                       <motion.li
                         key={t.id}
@@ -154,7 +214,12 @@ export function PendingClient({
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
                         transition={{ duration: 0.12 }}
-                        className="rounded-2xl border border-line bg-bg-main p-3"
+                        className={cn(
+                          "rounded-2xl border p-3",
+                          overdue
+                            ? "border-red-200 bg-red-50/60"
+                            : "border-line bg-bg-main",
+                        )}
                       >
                         <div className="flex items-start gap-2">
                           <div className="flex-1 min-w-0">
@@ -165,6 +230,12 @@ export function PendingClient({
                               </p>
                             )}
                             <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              {overdue && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
+                                  <AlertTriangle className="w-3 h-3" strokeWidth={2} />
+                                  vencido
+                                </span>
+                              )}
                               <span
                                 className={cn(
                                   "text-[10px] px-2 py-0.5 rounded-full border",
@@ -173,6 +244,12 @@ export function PendingClient({
                               >
                                 {URGENCY_LABEL[t.urgency]}
                               </span>
+                              {t.due_date && !overdue && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-ink-muted font-mono">
+                                  <CalendarIcon className="w-3 h-3" />
+                                  {t.due_date}
+                                </span>
+                              )}
                               {assignee && (
                                 <span
                                   className="text-xs text-ink-muted"
@@ -184,7 +261,7 @@ export function PendingClient({
                             </div>
                           </div>
                           <button
-                            onClick={() => remove(t.id)}
+                            onClick={() => remove(t)}
                             className="text-ink-muted hover:text-accent-primary shrink-0"
                             aria-label="Eliminar"
                           >
@@ -235,6 +312,7 @@ function NewTodoForm({
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState<Urgency>("normal");
   const [assignedTo, setAssignedTo] = useState<string>(currentUserId);
+  const [dueDate, setDueDate] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -248,17 +326,24 @@ function NewTodoForm({
       .select("home_id")
       .eq("id", user!.id)
       .single();
-    await supabase.from("todos").insert({
+    const { error } = await supabase.from("todos").insert({
       home_id: profile!.home_id,
       title: title.trim(),
       description: description.trim() || null,
       urgency,
       assigned_to: assignedTo || null,
       created_by: currentUserId,
+      due_date: dueDate || null,
     });
+    setLoading(false);
+    if (error) {
+      toast.error("No se pudo crear");
+      return;
+    }
     setTitle("");
     setDescription("");
-    setLoading(false);
+    setDueDate("");
+    toast.success("Pendiente creado");
     onDone();
   }
 
@@ -314,6 +399,15 @@ function NewTodoForm({
               </option>
             ))}
           </select>
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-xs text-ink-muted">Fecha límite (opcional)</span>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-line bg-bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+          />
         </label>
       </div>
       <div className="flex gap-2">

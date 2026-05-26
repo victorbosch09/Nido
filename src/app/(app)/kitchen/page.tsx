@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/page-header";
 import { KitchenClient } from "./kitchen-client";
 
 export default async function KitchenPage() {
@@ -13,18 +14,16 @@ export default async function KitchenPage() {
 
   const { data: recipes } = await supabase
     .from("recipes")
-    .select("id, title, prep_minutes, servings, ingredients, steps, tags, created_at")
+    .select("id, title, prep_minutes, servings, ingredients, steps, tags, created_at, last_cooked_at")
     .eq("home_id", homeId)
     .order("created_at", { ascending: false });
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-4xl">Cocina</h1>
-        <p className="text-ink-muted mt-1 leading-relaxed">
-          Recetas favoritas — los platos que valen la pena recordar.
-        </p>
-      </header>
+      <PageHeader
+        title="Cocina"
+        subtitle="Recetas favoritas — los platos que valen la pena recordar."
+      />
       <KitchenClient recipes={recipes ?? []} />
     </div>
   );

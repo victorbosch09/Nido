@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-
-const AVATARS = ["🌿", "🌸", "🌻", "🦊", "🐝", "🪴", "☕", "🍯", "🌙", "⭐", "🐢", "🦔"];
+import { toast } from "@/components/toast";
+import { AVATARS } from "@/lib/avatars";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -67,20 +67,20 @@ export default function SignupPage() {
 
           <div>
             <span className="text-sm text-ink-muted">Elegí tu avatar</span>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2 max-h-44 overflow-y-auto p-1">
               {AVATARS.map((a) => (
                 <button
                   type="button"
-                  key={a}
-                  onClick={() => setAvatar(a)}
-                  className={`text-2xl w-11 h-11 rounded-full border transition ${
-                    avatar === a
+                  key={a.emoji}
+                  onClick={() => setAvatar(a.emoji)}
+                  className={`text-2xl w-11 h-11 rounded-full border leading-none ${
+                    avatar === a.emoji
                       ? "border-accent-primary bg-accent-soft/30 scale-110"
                       : "border-line bg-bg-main hover:bg-accent-soft/20"
                   }`}
-                  aria-label={`Avatar ${a}`}
+                  aria-label={a.label}
                 >
-                  {a}
+                  {a.emoji}
                 </button>
               ))}
             </div>

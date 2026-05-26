@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
 
 type Member = { id: string; name: string; avatar_emoji: string };
 
@@ -50,6 +51,7 @@ export function NewTaskForm({ members }: { members: Member[] }) {
       setLoading(false);
       return;
     }
+    toast.success("Tarea creada");
     router.push("/tasks");
     router.refresh();
   }

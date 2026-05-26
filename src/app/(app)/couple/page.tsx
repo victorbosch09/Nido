@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/page-header";
 import { CoupleClient } from "./couple-client";
 
 export default async function CouplePage() {
@@ -25,12 +26,10 @@ export default async function CouplePage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-4xl">Tiempo en pareja</h1>
-        <p className="text-ink-muted mt-1 leading-relaxed">
-          Notas para tu pareja — pequeñas chispas en su día.
-        </p>
-      </header>
+      <PageHeader
+        title="Tiempo en pareja"
+        subtitle="Notas para tu pareja — pequeñas chispas en su día."
+      />
       <CoupleClient
         notes={notes ?? []}
         members={members ?? []}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
 
 type Note = {
@@ -60,20 +61,52 @@ export function CoupleClient({
       .select("home_id")
       .eq("id", user!.id)
       .single();
-    await supabase.from("love_notes").insert({
+    const { error } = await supabase.from("love_notes").insert({
       home_id: profile!.home_id,
       body: body.trim(),
       from_user: currentUserId,
       to_user: partner?.id ?? null,
     });
-    setBody("");
     setSending(false);
+    if (error) {
+      toast.error("No se pudo enviar");
+      return;
+    }
+    setBody("");
+    toast.success("Nota enviada");
     startTransition(() => router.refresh());
   }
 
-  async function remove(id: string) {
+  async function remove(note: Note) {
     const supabase = createClient();
-    await supabase.from("love_notes").delete().eq("id", id);
+    const { error } = await supabase.from("love_notes").delete().eq("id", note.id);
+    if (error) {
+      toast.error("No se pudo eliminar");
+      return;
+    }
+    toast({
+      title: "Nota eliminada",
+      action: {
+        label: "Deshacer",
+        onClick: async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("home_id")
+            .eq("id", user!.id)
+            .single();
+          await supabase.from("love_notes").insert({
+            id: note.id,
+            home_id: profile!.home_id,
+            body: note.body,
+            from_user: note.from_user,
+            to_user: note.to_user,
+            read_at: note.read_at,
+          });
+          startTransition(() => router.refresh());
+        },
+      },
+    });
     startTransition(() => router.refresh());
   }
 
@@ -162,7 +195,7 @@ export function CoupleClient({
                     </div>
                     {mine && (
                       <button
-                        onClick={() => remove(n.id)}
+                        onClick={() => remove(n)}
                         className="text-ink-muted hover:text-accent-primary shrink-0"
                         aria-label="Eliminar"
                       >

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/page-header";
 import { TaskList } from "./task-list";
+import { startOfMonth, format } from "date-fns";
 
 export default async function TasksPage() {
   const supabase = createClient();
@@ -19,38 +21,73 @@ export default async function TasksPage() {
     supabase.from("profiles").select("id, name, avatar_emoji").eq("home_id", homeId),
   ]);
 
-  // Métrica de equidad: % de tareas completadas en el mes por mí.
+  const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
   const myId = user!.id;
-  const completed = (tasks ?? []).filter((t) => t.status === "done");
-  const mine = completed.filter((t) => t.assigned_to === myId).length;
-  const total = completed.length;
-  const myPct = total > 0 ? Math.round((mine / total) * 100) : 0;
+
+  // Equidad del mes: por cada miembro, cuántas tareas completó este mes.
+  const completedThisMonth = (tasks ?? []).filter(
+    (t) => t.completed_at && t.completed_at.slice(0, 10) >= monthStart,
+  );
+  const totalDone = completedThisMonth.length;
+  const perMember = (members ?? []).map((m) => {
+    const count = completedThisMonth.filter((t) => t.assigned_to === m.id).length;
+    const pct = totalDone > 0 ? Math.round((count / totalDone) * 100) : 0;
+    return { ...m, count, pct };
+  });
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-4xl">Tareas del hogar</h1>
-          <p className="text-ink-muted mt-1">Distribución y rutina compartida.</p>
-        </div>
-        <Link
-          href="/tasks/new"
-          prefetch
-          className="rounded-full bg-accent-primary text-bg-card font-medium px-5 py-2.5 shadow-warm hover:shadow-warm-lg"
-        >
-          + Nueva
-        </Link>
-      </header>
+      <PageHeader
+        title="Tareas del hogar"
+        subtitle="Distribución y rutina compartida."
+        right={
+          <Link
+            href="/tasks/new"
+            prefetch
+            className="rounded-full bg-accent-primary text-bg-card font-medium px-5 py-2.5 shadow-warm hover:shadow-warm-lg whitespace-nowrap"
+          >
+            + Nueva
+          </Link>
+        }
+      />
 
       <div className="rounded-3xl border border-line bg-bg-card p-5 shadow-warm">
-        <p className="text-xs uppercase tracking-wider text-ink-muted">Balance del mes</p>
-        <p className="font-display text-3xl mt-1">
-          {total === 0 ? "Sin completadas todavía" : `Has hecho el ${myPct}%`}
-        </p>
-        <div className="mt-3 h-2 rounded-full bg-bg-main overflow-hidden flex">
-          <div className="h-full bg-accent-secondary" style={{ width: `${myPct}%` }} />
-          <div className="h-full bg-accent-soft" style={{ width: `${100 - myPct}%` }} />
-        </div>
+        <p className="text-xs uppercase tracking-wider text-ink-muted">Equidad del mes</p>
+        {totalDone === 0 ? (
+          <p className="font-display text-2xl mt-1">Sin completadas todavía</p>
+        ) : (
+          <>
+            <p className="font-display text-2xl mt-1">
+              {totalDone} {totalDone === 1 ? "tarea completada" : "tareas completadas"}
+            </p>
+            <div className="mt-3 h-2.5 rounded-full bg-bg-main overflow-hidden flex">
+              {perMember.map((m) => (
+                <div
+                  key={m.id}
+                  className={
+                    m.id === myId ? "bg-accent-primary" : "bg-accent-secondary"
+                  }
+                  style={{ width: `${m.pct}%` }}
+                  title={`${m.name}: ${m.count} (${m.pct}%)`}
+                />
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-4 flex-wrap text-sm">
+              {perMember.map((m) => (
+                <div key={m.id} className="flex items-center gap-2">
+                  <span className="text-lg leading-none">{m.avatar_emoji}</span>
+                  <span className="text-ink-muted">
+                    {m.id === myId ? "Vos" : m.name}
+                  </span>
+                  <span className="font-mono">
+                    {m.count}
+                    <span className="text-ink-muted">·{m.pct}%</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <TaskList tasks={tasks ?? []} members={members ?? []} currentUserId={myId} />

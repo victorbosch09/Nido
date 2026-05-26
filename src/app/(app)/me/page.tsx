@@ -16,7 +16,7 @@ export default async function MePage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
   const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd");
-  const recentStart = format(subDays(new Date(), 13), "yyyy-MM-dd");
+  const recentStart = format(subDays(new Date(), 29), "yyyy-MM-dd");
 
   const [
     { data: myMoodToday },
