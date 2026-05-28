@@ -333,7 +333,7 @@ function HistoryList({ movements }: { movements: Movement[] }) {
               <p className="font-medium truncate">{m.item_name}</p>
               <p className="text-xs text-ink-muted font-mono">
                 {isPurchase ? "Compra" : m.type === "consumption" ? "Consumo" : "Ajuste"} ·{" "}
-                {Number(m.quantity)}{m.unit ? ` ${m.unit}` : ""} ·{" "}
+                {m.note ? `${m.note}` : `${Number(m.quantity)}${m.unit ? ` ${m.unit}` : ""}`} ·{" "}
                 {formatDistanceToNow(new Date(m.created_at), { locale: es, addSuffix: true })}
               </p>
             </div>
@@ -349,12 +349,20 @@ function HistoryList({ movements }: { movements: Movement[] }) {
   );
 }
 
-type Line = { name: string; qty: string; unit: string; price: string };
+type Line = { name: string; packs: string; content: string; unit: string; price: string };
+
+function lineBaseQty(l: Line): number {
+  const packs = Number(l.packs) || 0;
+  const content = Number(l.content) || 0;
+  return content > 0 ? packs * content : packs;
+}
 
 function PurchaseForm({
   currentUserId, existing, onDone,
 }: { currentUserId: string; existing: Item[]; onDone: () => void }) {
-  const [lines, setLines] = useState<Line[]>([{ name: "", qty: "", unit: "", price: "" }]);
+  const [lines, setLines] = useState<Line[]>([
+    { name: "", packs: "1", content: "", unit: "", price: "" },
+  ]);
   const [loading, setLoading] = useState(false);
 
   const total = useMemo(
@@ -366,7 +374,7 @@ function PurchaseForm({
     setLines((arr) => arr.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
   function addLine() {
-    setLines((arr) => [...arr, { name: "", qty: "", unit: "", price: "" }]);
+    setLines((arr) => [...arr, { name: "", packs: "1", content: "", unit: "", price: "" }]);
   }
   function removeLine(i: number) {
     setLines((arr) => (arr.length === 1 ? arr : arr.filter((_, idx) => idx !== i)));
@@ -374,7 +382,9 @@ function PurchaseForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const valid = lines.filter((l) => l.name.trim() && Number(l.qty) > 0 && Number(l.price) >= 0);
+    const valid = lines.filter(
+      (l) => l.name.trim() && lineBaseQty(l) > 0 && Number(l.price) >= 0,
+    );
     if (valid.length === 0) {
       toast.error("Agregá al menos un item válido");
       return;
@@ -390,18 +400,17 @@ function PurchaseForm({
     const existingByName = new Map(existing.map((i) => [i.name.toLowerCase(), i]));
 
     for (const l of valid) {
-      const qty = Number(l.qty);
+      const baseQty = lineBaseQty(l); // unidades consumibles totales (paquetes × contenido)
       const price = Number(l.price);
-      const unitCost = qty > 0 ? price / qty : 0;
+      const unitCost = baseQty > 0 ? price / baseQty : 0;
       const prev = existingByName.get(l.name.trim().toLowerCase());
 
       let itemId: string;
       if (prev) {
-        // Promedio ponderado del costo unitario
         const prevQty = Number(prev.quantity);
         const prevCost = Number(prev.unit_cost);
-        const newQty = prevQty + qty;
-        const newUnitCost = newQty > 0 ? (prevQty * prevCost + qty * unitCost) / newQty : unitCost;
+        const newQty = prevQty + baseQty;
+        const newUnitCost = newQty > 0 ? (prevQty * prevCost + baseQty * unitCost) / newQty : unitCost;
         await supabase
           .from("pantry_items")
           .update({
@@ -419,7 +428,7 @@ function PurchaseForm({
             home_id: homeId,
             name: l.name.trim(),
             unit: l.unit.trim() || null,
-            quantity: qty,
+            quantity: baseQty,
             unit_cost: Number(unitCost.toFixed(4)),
           })
           .select("id")
@@ -427,20 +436,27 @@ function PurchaseForm({
         itemId = inserted!.id;
       }
 
+      const packs = Number(l.packs) || 0;
+      const content = Number(l.content) || 0;
+      const note =
+        content > 0
+          ? `${packs} × ${content}${l.unit.trim() ? " " + l.unit.trim() : ""}`
+          : null;
+
       await supabase.from("pantry_movements").insert({
         home_id: homeId,
         item_id: itemId,
         item_name: l.name.trim(),
         type: "purchase",
-        quantity: qty,
+        quantity: baseQty,
         unit: l.unit.trim() || null,
         unit_cost: Number(unitCost.toFixed(4)),
         total_cost: Number(price.toFixed(2)),
+        note,
         created_by: currentUserId,
       });
     }
 
-    // Registrar el gasto total del súper en el presupuesto (categoría groceries)
     if (total > 0) {
       await supabase.from("expenses").insert({
         home_id: homeId,
@@ -463,51 +479,80 @@ function PurchaseForm({
   return (
     <form onSubmit={submit} className="space-y-3 p-4 rounded-2xl bg-bg-main border border-line">
       <p className="text-xs uppercase tracking-wider text-ink-muted">Items de la compra</p>
-      <div className="space-y-2">
-        {lines.map((l, i) => (
-          <div key={i} className="grid grid-cols-12 gap-2 items-start">
-            <input
-              value={l.name}
-              onChange={(e) => update(i, { name: e.target.value })}
-              placeholder="Item (ej: pollo entero)"
-              className="col-span-12 sm:col-span-5 rounded-xl border border-line bg-bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
-            />
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              inputMode="decimal"
-              value={l.qty}
-              onChange={(e) => update(i, { qty: e.target.value })}
-              placeholder="Cant."
-              className="col-span-4 sm:col-span-2 rounded-xl border border-line bg-bg-card px-2 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
-            />
-            <input
-              value={l.unit}
-              onChange={(e) => update(i, { unit: e.target.value })}
-              placeholder="ud/kg"
-              className="col-span-4 sm:col-span-2 rounded-xl border border-line bg-bg-card px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
-            />
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              inputMode="decimal"
-              value={l.price}
-              onChange={(e) => update(i, { price: e.target.value })}
-              placeholder="$ total"
-              className="col-span-3 sm:col-span-2 rounded-xl border border-line bg-bg-card px-2 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
-            />
-            <button
-              type="button"
-              onClick={() => removeLine(i)}
-              className="col-span-1 flex items-center justify-center py-2 text-ink-muted hover:text-accent-primary"
-              aria-label="Quitar línea"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {lines.map((l, i) => {
+          const baseQty = lineBaseQty(l);
+          const price = Number(l.price) || 0;
+          const unitCost = baseQty > 0 ? price / baseQty : 0;
+          const showPreview = baseQty > 0 && (Number(l.content) || 0) > 0;
+          return (
+            <div key={i} className="rounded-2xl border border-line bg-bg-card p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  value={l.name}
+                  onChange={(e) => update(i, { name: e.target.value })}
+                  placeholder="Item (ej: tortillas)"
+                  className="flex-1 min-w-0 rounded-xl border border-line bg-bg-main px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                />
+                {lines.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeLine(i)}
+                    className="text-ink-muted hover:text-accent-primary shrink-0"
+                    aria-label="Quitar línea"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wide text-ink-muted">Paquetes</span>
+                  <input
+                    type="number" step="1" min="0" inputMode="numeric"
+                    value={l.packs}
+                    onChange={(e) => update(i, { packs: e.target.value })}
+                    className="mt-0.5 w-full rounded-xl border border-line bg-bg-main px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wide text-ink-muted">Contenido</span>
+                  <input
+                    type="number" step="0.01" min="0" inputMode="decimal"
+                    value={l.content}
+                    onChange={(e) => update(i, { content: e.target.value })}
+                    placeholder="ej: 8"
+                    className="mt-0.5 w-full rounded-xl border border-line bg-bg-main px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wide text-ink-muted">Unidad</span>
+                  <input
+                    value={l.unit}
+                    onChange={(e) => update(i, { unit: e.target.value })}
+                    placeholder="tortilla"
+                    className="mt-0.5 w-full rounded-xl border border-line bg-bg-main px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-wide text-ink-muted">$ total</span>
+                  <input
+                    type="number" step="0.01" min="0" inputMode="decimal"
+                    value={l.price}
+                    onChange={(e) => update(i, { price: e.target.value })}
+                    placeholder="1.30"
+                    className="mt-0.5 w-full rounded-xl border border-line bg-bg-main px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                  />
+                </label>
+              </div>
+              {showPreview && (
+                <p className="text-xs text-accent-secondary font-mono">
+                  = {baseQty} {l.unit.trim() || "u"} · {formatCurrency(unitCost)}/{l.unit.trim() || "u"}
+                </p>
+              )}
+            </div>
+          );
+        })}
       </div>
       <button
         type="button"
