@@ -18,6 +18,9 @@ const REALTIME_TABLES = [
   "chore_logs",
   "rules",
   "rule_logs",
+  "date_plans",
+  "wishes",
+  "important_dates",
   "profiles",
 ] as const;
 

@@ -55,6 +55,7 @@ export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
 export const SECTION_ICON = {
   dashboard: Home,
   tasks: ListTodo,
+  calendar: CalendarDays,
   routine: CalendarDays,
   budget: Wallet,
   groceries: ShoppingCart,

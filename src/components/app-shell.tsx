@@ -19,6 +19,7 @@ const PRIMARY: NavItem[] = [
 ];
 
 const SECONDARY: NavItem[] = [
+  { href: "/calendar", label: "Calendario", icon: SECTION_ICON.calendar },
   { href: "/routine", label: "Rutina", icon: SECTION_ICON.routine },
   { href: "/inventory", label: "Inventario", icon: SECTION_ICON.inventory },
   { href: "/kitchen", label: "Cocina", icon: SECTION_ICON.kitchen },

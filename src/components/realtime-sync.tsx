@@ -19,6 +19,9 @@ type Table =
   | "chore_logs"
   | "rules"
   | "rule_logs"
+  | "date_plans"
+  | "wishes"
+  | "important_dates"
   | "profiles"
   | "homes";
 

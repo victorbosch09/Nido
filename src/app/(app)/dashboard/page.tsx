@@ -1,10 +1,17 @@
 import Link from "next/link";
-import { ListTodo, Wallet, ShoppingCart, Heart, type LucideIcon } from "lucide-react";
+import {
+  ListTodo, Wallet, ShoppingCart, Heart, Boxes, TrendingUp, CheckCircle2, type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { NestLogo } from "@/components/logo";
 import { dailyQuote, formatCurrency, greetingByTime } from "@/lib/utils";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { startOfMonth, endOfMonth, format, getDate, getDaysInMonth } from "date-fns";
 import { es } from "date-fns/locale";
+
+const CAT_LABEL: Record<string, string> = {
+  groceries: "Mercado", home: "Hogar", personal_care: "Cuidado", eating_out: "Restaurantes",
+  fun: "Diversión", health: "Salud", repairs: "Arreglos", other: "Otro",
+};
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -27,6 +34,10 @@ export default async function DashboardPage() {
     { data: monthExpenses },
     { data: budgets },
     { data: partner },
+    { data: pantry },
+    { count: groceriesPending },
+    { data: nextPlan },
+    { count: doneThisMonth },
   ] = await Promise.all([
     supabase
       .from("tasks")
@@ -36,24 +47,35 @@ export default async function DashboardPage() {
       .or(`due_date.is.null,due_date.lte.${today}`)
       .order("priority", { ascending: false })
       .limit(5),
-    supabase
-      .from("expenses")
-      .select("amount, category")
-      .eq("home_id", homeId)
-      .gte("date", monthStart)
-      .lte("date", monthEnd),
+    supabase.from("expenses").select("amount, category").eq("home_id", homeId).gte("date", monthStart).lte("date", monthEnd),
     supabase.from("budgets").select("category, monthly_limit").eq("home_id", homeId),
-    supabase
-      .from("profiles")
-      .select("id, name, avatar_emoji")
-      .eq("home_id", homeId)
-      .neq("id", user.id)
-      .maybeSingle(),
+    supabase.from("profiles").select("id, name, avatar_emoji").eq("home_id", homeId).neq("id", user.id).maybeSingle(),
+    supabase.from("pantry_items").select("quantity, unit_cost, is_bulk").eq("home_id", homeId),
+    supabase.from("grocery_items").select("id", { count: "exact", head: true }).eq("home_id", homeId).eq("is_done", false),
+    supabase.from("date_plans").select("title, planned_at").eq("home_id", homeId).eq("done", false).not("planned_at", "is", null).order("planned_at", { ascending: true }).limit(1).maybeSingle(),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).eq("home_id", homeId).eq("completed_by", user.id).gte("completed_at", monthStart + "T00:00:00").lte("completed_at", monthEnd + "T23:59:59"),
   ]);
 
   const totalSpent = (monthExpenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
   const totalBudget = (budgets ?? []).reduce((s, b) => s + Number(b.monthly_limit), 0);
   const pct = totalBudget > 0 ? Math.min(100, Math.round((totalSpent / totalBudget) * 100)) : 0;
+
+  // Proyección de fin de mes según ritmo de gasto actual
+  const dayOfMonth = getDate(new Date());
+  const daysInMonth = getDaysInMonth(new Date());
+  const projected = dayOfMonth > 0 ? (totalSpent / dayOfMonth) * daysInMonth : totalSpent;
+
+  // Valor del inventario
+  const inventoryValue = (pantry ?? []).reduce(
+    (s, i) => s + (i.is_bulk ? (Number(i.quantity) / 100) * Number(i.unit_cost) : Number(i.quantity) * Number(i.unit_cost)),
+    0,
+  );
+
+  // Gasto por categoría (top 4)
+  const byCat = new Map<string, number>();
+  for (const e of monthExpenses ?? []) byCat.set(e.category, (byCat.get(e.category) ?? 0) + Number(e.amount));
+  const topCats = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const maxCat = topCats.length > 0 ? topCats[0][1] : 1;
 
   const monthLabel = format(new Date(), "MMMM yyyy", { locale: es });
 
@@ -81,6 +103,43 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      {/* Widgets de análisis */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Widget label={`Gastado · ${monthLabel}`} value={formatCurrency(totalSpent)} icon={Wallet} />
+        <Widget
+          label="Proyección fin de mes"
+          value={formatCurrency(projected)}
+          icon={TrendingUp}
+          hint={totalBudget > 0 ? (projected > totalBudget ? "sobre presupuesto" : "dentro del presupuesto") : undefined}
+          danger={totalBudget > 0 && projected > totalBudget}
+        />
+        <Widget label="Inventario en casa" value={formatCurrency(inventoryValue)} icon={Boxes} />
+        <Widget label="Tareas hechas (vos)" value={String(doneThisMonth ?? 0)} icon={CheckCircle2} />
+      </div>
+
+      {/* Análisis de gasto por categoría */}
+      {topCats.length > 0 && (
+        <div className="rounded-3xl border border-line bg-bg-card shadow-warm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs uppercase tracking-wider text-ink-muted">En qué se va el mes</p>
+            <Link href="/budget" prefetch className="text-xs text-accent-primary">Ver presupuesto</Link>
+          </div>
+          <div className="space-y-2.5">
+            {topCats.map(([cat, amt]) => (
+              <div key={cat}>
+                <div className="flex items-center justify-between text-sm">
+                  <span>{CAT_LABEL[cat] ?? cat}</span>
+                  <span className="font-mono text-ink-muted">{formatCurrency(amt)}</span>
+                </div>
+                <div className="mt-1 h-2 rounded-full bg-bg-main overflow-hidden">
+                  <div className="h-full bg-accent-primary" style={{ width: `${(amt / maxCat) * 100}%`, transition: "width 240ms ease-out" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card href="/tasks" title="Tareas de hoy" icon={ListTodo} subtitle={`${pendingCount ?? 0} pendientes`}>
           {todayTasks && todayTasks.length > 0 ? (
@@ -99,26 +158,25 @@ export default async function DashboardPage() {
 
         <Card href="/budget" title={`Presupuesto · ${monthLabel}`} icon={Wallet} subtitle={`${pct}% gastado`}>
           <div className="mt-3 h-2 rounded-full bg-bg-main overflow-hidden">
-            <div
-              className="h-full"
-              style={{
-                width: `${pct}%`,
-                background: pct < 80 ? "var(--accent-secondary)" : pct < 100 ? "#D4A04A" : "#C9543B",
-                transition: "width 240ms ease-out",
-              }}
-            />
+            <div className="h-full" style={{ width: `${pct}%`, background: pct < 80 ? "var(--accent-secondary)" : pct < 100 ? "#D4A04A" : "#C9543B", transition: "width 240ms ease-out" }} />
           </div>
           <p className="text-xs text-ink-muted mt-2 font-mono">
             {formatCurrency(totalSpent)} / {totalBudget > 0 ? formatCurrency(totalBudget) : "—"}
           </p>
         </Card>
 
-        <Card href="/groceries" title="Próxima compra" icon={ShoppingCart} subtitle="Lista lista para salir">
-          <p className="text-sm text-ink-muted mt-2">Pronto activamos la despensa inteligente.</p>
+        <Card href="/groceries" title="Próxima compra" icon={ShoppingCart} subtitle={`${groceriesPending ?? 0} ${(groceriesPending ?? 0) === 1 ? "item" : "items"}`}>
+          <p className="text-sm text-ink-muted mt-2">
+            {(groceriesPending ?? 0) > 0 ? "Pendientes en la lista de compras." : "La lista está vacía."}
+          </p>
         </Card>
 
-        <Card href="/couple" title="Próximo plan" icon={Heart} subtitle="Tiempo juntos">
-          <p className="text-sm text-ink-muted mt-2">Programá su próxima cita en el módulo Pareja.</p>
+        <Card href="/couple" title="Próximo plan" icon={Heart} subtitle={nextPlan?.title ?? "Sin planes"}>
+          <p className="text-sm text-ink-muted mt-2">
+            {nextPlan?.planned_at
+              ? format(new Date(nextPlan.planned_at), "EEE d 'de' MMM, HH:mm", { locale: es })
+              : "Programá su próxima cita en Pareja."}
+          </p>
         </Card>
       </div>
 
@@ -134,19 +192,30 @@ export default async function DashboardPage() {
   );
 }
 
+function Widget({
+  label, value, icon: Icon, hint, danger,
+}: { label: string; value: string; icon: LucideIcon; hint?: string; danger?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-line bg-bg-card p-4 shadow-warm">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] uppercase tracking-wider text-ink-muted leading-tight">{label}</p>
+        <Icon className="w-4 h-4 text-accent-primary shrink-0" strokeWidth={1.7} />
+      </div>
+      <p className="font-display text-2xl mt-1.5 font-mono">{value}</p>
+      {hint && <p className={`text-[10px] mt-0.5 ${danger ? "text-red-700" : "text-accent-secondary"}`}>{hint}</p>}
+    </div>
+  );
+}
+
 function Card({
   href, title, icon: Icon, subtitle, children,
 }: { href: string; title: string; icon: LucideIcon; subtitle: string; children: React.ReactNode }) {
   return (
-    <Link
-      href={href}
-      prefetch
-      className="block rounded-3xl bg-bg-card border border-line shadow-warm p-5 hover:shadow-warm-lg"
-    >
+    <Link href={href} prefetch className="block rounded-3xl bg-bg-card border border-line shadow-warm p-5 hover:shadow-warm-lg">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wider text-ink-muted">{title}</p>
-          <p className="font-display text-2xl mt-1">{subtitle}</p>
+          <p className="font-display text-2xl mt-1 truncate">{subtitle}</p>
         </div>
         <Icon className="w-7 h-7 text-accent-primary shrink-0" strokeWidth={1.6} aria-hidden />
       </div>
