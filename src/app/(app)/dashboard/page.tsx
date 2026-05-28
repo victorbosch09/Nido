@@ -1,12 +1,22 @@
 import Link from "next/link";
 import {
-  ListTodo, Wallet, ShoppingCart, Heart, Boxes, TrendingUp, CheckCircle2, type LucideIcon,
+  ListTodo, Wallet, ShoppingCart, Heart, Boxes, TrendingUp, CheckCircle2, Bell, Cake, type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { NestLogo } from "@/components/logo";
 import { dailyQuote, formatCurrency, greetingByTime } from "@/lib/utils";
-import { startOfMonth, endOfMonth, format, getDate, getDaysInMonth } from "date-fns";
+import { startOfMonth, endOfMonth, format, getDate, getDaysInMonth, setYear, differenceInCalendarDays } from "date-fns";
 import { es } from "date-fns/locale";
+
+function nextOccurrence(dateStr: string, yearly: boolean): Date {
+  const d = new Date(dateStr + "T00:00:00");
+  if (!yearly) return d;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let next = setYear(d, today.getFullYear());
+  if (next < today) next = setYear(d, today.getFullYear() + 1);
+  return next;
+}
 
 const CAT_LABEL: Record<string, string> = {
   groceries: "Mercado", home: "Hogar", personal_care: "Cuidado", eating_out: "Restaurantes",
@@ -38,6 +48,8 @@ export default async function DashboardPage() {
     { count: groceriesPending },
     { data: nextPlan },
     { count: doneThisMonth },
+    { data: dashExtra1 },
+    { count: overdueTodosCount },
   ] = await Promise.all([
     supabase
       .from("tasks")
@@ -54,7 +66,12 @@ export default async function DashboardPage() {
     supabase.from("grocery_items").select("id", { count: "exact", head: true }).eq("home_id", homeId).eq("is_done", false),
     supabase.from("date_plans").select("title, planned_at").eq("home_id", homeId).eq("done", false).not("planned_at", "is", null).order("planned_at", { ascending: true }).limit(1).maybeSingle(),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("home_id", homeId).eq("completed_by", user.id).gte("completed_at", monthStart + "T00:00:00").lte("completed_at", monthEnd + "T23:59:59"),
+    supabase.from("important_dates").select("title, date, recurring_yearly").eq("home_id", homeId),
+    supabase.from("todos").select("id", { count: "exact", head: true }).eq("home_id", homeId).neq("status", "done").not("due_date", "is", null).lt("due_date", today),
   ]);
+
+  const importantDates = dashExtra1 ?? [];
+  const overdueTodos = overdueTodosCount ?? 0;
 
   const totalSpent = (monthExpenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
   const totalBudget = (budgets ?? []).reduce((s, b) => s + Number(b.monthly_limit), 0);
@@ -79,6 +96,26 @@ export default async function DashboardPage() {
 
   const monthLabel = format(new Date(), "MMMM yyyy", { locale: es });
 
+  // Recordatorios: aniversarios próximos (≤3 días), pendientes vencidos, plan de hoy
+  const alerts: { icon: LucideIcon; text: string; href: string }[] = [];
+  for (const d of importantDates) {
+    const next = nextOccurrence(d.date as string, d.recurring_yearly as boolean);
+    const days = differenceInCalendarDays(next, new Date());
+    if (days >= 0 && days <= 3) {
+      alerts.push({
+        icon: Cake,
+        text: days === 0 ? `Hoy: ${d.title}` : days === 1 ? `Mañana: ${d.title}` : `En ${days} días: ${d.title}`,
+        href: "/couple",
+      });
+    }
+  }
+  if (nextPlan?.planned_at && differenceInCalendarDays(new Date(nextPlan.planned_at), new Date()) === 0) {
+    alerts.push({ icon: Heart, text: `Hoy tienen un plan: ${nextPlan.title}`, href: "/couple" });
+  }
+  if (overdueTodos > 0) {
+    alerts.push({ icon: ListTodo, text: `${overdueTodos} ${overdueTodos === 1 ? "pendiente vencido" : "pendientes vencidos"}`, href: "/pending" });
+  }
+
   // @ts-expect-error nested type from supabase
   const homeName = profile?.homes?.name ?? "Nuestro nido";
   // @ts-expect-error nested type from supabase
@@ -100,6 +137,28 @@ export default async function DashboardPage() {
           </div>
           <p className="text-sm text-ink-muted mt-2">Compartile este código para que se una al nido:</p>
           <p className="mt-3 font-mono text-3xl tracking-widest text-accent-primary">{inviteCode}</p>
+        </div>
+      )}
+
+      {alerts.length > 0 && (
+        <div className="rounded-2xl border border-accent-soft bg-accent-soft/15 p-4">
+          <div className="flex items-center gap-2 text-accent-primary mb-2">
+            <Bell className="w-4 h-4" strokeWidth={1.9} />
+            <p className="text-sm font-medium text-ink">Recordatorios</p>
+          </div>
+          <ul className="space-y-1.5">
+            {alerts.map((a, i) => {
+              const Icon = a.icon;
+              return (
+                <li key={i}>
+                  <Link href={a.href} prefetch className="flex items-center gap-2 text-sm text-ink hover:text-accent-primary">
+                    <Icon className="w-4 h-4 shrink-0 text-accent-primary" strokeWidth={1.8} />
+                    <span>{a.text}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

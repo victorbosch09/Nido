@@ -21,6 +21,9 @@ const REALTIME_TABLES = [
   "date_plans",
   "wishes",
   "important_dates",
+  "settlements",
+  "recurring_expenses",
+  "meal_plans",
   "profiles",
 ] as const;
 

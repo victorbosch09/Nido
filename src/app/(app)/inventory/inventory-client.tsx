@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus, X, ShoppingBasket, Boxes, Wallet, Minus, History, Trash2,
+  Plus, X, ShoppingBasket, Boxes, Wallet, Minus, Trash2, ShoppingCart,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -47,19 +47,41 @@ export function InventoryClient({
   movements: serverMovements,
   currentUserId,
   spentThisMonth,
+  prefillName,
 }: {
   items: Item[];
   movements: Movement[];
   currentUserId: string;
   spentThisMonth: number;
+  prefillName?: string;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [items, setItems] = useState<Item[]>(serverItems);
   const [tab, setTab] = useState<"stock" | "history">("stock");
-  const [showBuy, setShowBuy] = useState(false);
+  const [showBuy, setShowBuy] = useState(!!prefillName);
 
   useEffect(() => setItems(serverItems), [serverItems]);
+
+  async function addToShoppingList(item: Item) {
+    const supabase = createClient();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("home_id")
+      .eq("id", currentUserId)
+      .single();
+    const { error } = await supabase.from("grocery_items").insert({
+      home_id: profile!.home_id,
+      name: item.name,
+      category: "general",
+      added_by: currentUserId,
+    });
+    if (error) {
+      toast.error("No se pudo agregar a la lista");
+      return;
+    }
+    toast.success(`"${item.name}" a la lista de compras`);
+  }
 
   const inventoryValue = useMemo(
     () => items.reduce((s, i) => s + itemValue(i), 0),
@@ -219,6 +241,7 @@ export function InventoryClient({
             <PurchaseForm
               currentUserId={currentUserId}
               existing={items}
+              initialName={prefillName}
               onDone={() => {
                 setShowBuy(false);
                 startTransition(() => router.refresh());
@@ -241,6 +264,7 @@ export function InventoryClient({
                   onConsume={(qty) => consume(item, qty)}
                   onSetLevel={(pct) => setBulkLevel(item, pct)}
                   onRemove={() => removeItem(item)}
+                  onAddToList={() => addToShoppingList(item)}
                 />
               ))}
             </AnimatePresence>
@@ -282,18 +306,21 @@ function StatCard({
 }
 
 function StockRow({
-  item, onConsume, onSetLevel, onRemove,
+  item, onConsume, onSetLevel, onRemove, onAddToList,
 }: {
   item: Item;
   onConsume: (qty: number) => void;
   onSetLevel: (pct: number) => void;
   onRemove: () => void;
+  onAddToList: () => void;
 }) {
   const [consuming, setConsuming] = useState(false);
   const [qty, setQty] = useState("1");
   const value = itemValue(item);
   const level = Number(item.quantity);
   const low = level <= 0;
+  // "Reponer": discreto vacío, o granel <= 25%
+  const needsRestock = item.is_bulk ? level <= 25 : level <= 0;
 
   return (
     <motion.li
@@ -324,14 +351,23 @@ function StockRow({
         </div>
         {!item.is_bulk && !consuming && (
           <>
-            <button
-              onClick={() => setConsuming(true)}
-              disabled={low}
-              className="inline-flex items-center gap-1 rounded-full border border-line bg-bg-main px-3 py-1.5 text-xs text-ink-muted disabled:opacity-40"
-            >
-              <Minus className="w-3.5 h-3.5" />
-              Usar
-            </button>
+            {needsRestock ? (
+              <button
+                onClick={onAddToList}
+                className="inline-flex items-center gap-1 rounded-full border border-accent-primary text-accent-primary px-3 py-1.5 text-xs font-medium"
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                A la lista
+              </button>
+            ) : (
+              <button
+                onClick={() => setConsuming(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-line bg-bg-main px-3 py-1.5 text-xs text-ink-muted"
+              >
+                <Minus className="w-3.5 h-3.5" />
+                Usar
+              </button>
+            )}
             <button onClick={onRemove} className="text-ink-muted hover:text-accent-primary" aria-label="Eliminar">
               <Trash2 className="w-4 h-4" />
             </button>
@@ -358,9 +394,20 @@ function StockRow({
           </div>
         )}
         {item.is_bulk && (
-          <button onClick={onRemove} className="text-ink-muted hover:text-accent-primary shrink-0" aria-label="Eliminar">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <>
+            {needsRestock && (
+              <button
+                onClick={onAddToList}
+                className="inline-flex items-center gap-1 rounded-full border border-accent-primary text-accent-primary px-3 py-1.5 text-xs font-medium shrink-0"
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                A la lista
+              </button>
+            )}
+            <button onClick={onRemove} className="text-ink-muted hover:text-accent-primary shrink-0" aria-label="Eliminar">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </>
         )}
       </div>
 
@@ -448,9 +495,11 @@ function lineBaseQty(l: Line): number {
 const emptyLine = (): Line => ({ name: "", packs: "1", content: "", unit: "", price: "", bulk: false });
 
 function PurchaseForm({
-  currentUserId, existing, onDone,
-}: { currentUserId: string; existing: Item[]; onDone: () => void }) {
-  const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  currentUserId, existing, initialName, onDone,
+}: { currentUserId: string; existing: Item[]; initialName?: string; onDone: () => void }) {
+  const [lines, setLines] = useState<Line[]>([
+    initialName ? { ...emptyLine(), name: initialName } : emptyLine(),
+  ]);
   const [loading, setLoading] = useState(false);
 
   const total = useMemo(

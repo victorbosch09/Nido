@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X, Plus, ShoppingCart } from "lucide-react";
+import { Check, X, Plus, ShoppingCart, Boxes } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/components/toast";
 import { cn } from "@/lib/utils";
@@ -332,7 +333,18 @@ function GroceryRow({
           <p className="text-xs text-ink-muted truncate">{item.notes}</p>
         )}
       </div>
-      {adder && (
+      {item.is_done && (
+        <Link
+          href={`/inventory?add=${encodeURIComponent(item.name)}`}
+          prefetch
+          className="inline-flex items-center gap-1 rounded-full border border-accent-primary text-accent-primary px-2.5 py-1 text-[11px] font-medium shrink-0"
+          title="Cargar al inventario con su precio"
+        >
+          <Boxes className="w-3.5 h-3.5" />
+          Inventario
+        </Link>
+      )}
+      {adder && !item.is_done && (
         <span className="text-lg leading-none shrink-0" title={adder.name} aria-hidden>
           {adder.avatar_emoji}
         </span>

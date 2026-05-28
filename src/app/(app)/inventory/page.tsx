@@ -3,7 +3,11 @@ import { startOfMonth, format } from "date-fns";
 import { PageHeader } from "@/components/page-header";
 import { InventoryClient } from "./inventory-client";
 
-export default async function InventoryPage() {
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams?: { add?: string };
+}) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const { data: profile } = await supabase
@@ -49,6 +53,7 @@ export default async function InventoryPage() {
         movements={movements ?? []}
         currentUserId={user!.id}
         spentThisMonth={spentThisMonth}
+        prefillName={searchParams?.add}
       />
     </div>
   );

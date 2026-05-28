@@ -22,6 +22,9 @@ type Table =
   | "date_plans"
   | "wishes"
   | "important_dates"
+  | "settlements"
+  | "recurring_expenses"
+  | "meal_plans"
   | "profiles"
   | "homes";
 
