@@ -148,27 +148,31 @@ create policy "moods_delete_self" on public.moods
 
 -- ============================================================
 -- REALTIME: agregar tablas a la publicación supabase_realtime
--- (ignora si ya están)
+-- (idempotente: chequea pg_publication_tables antes de agregar)
 -- ============================================================
 do $$
 declare
   t text;
 begin
+  -- Crear la publicación si no existe (proyecto Supabase la trae por defecto,
+  -- pero por las dudas).
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+
   for t in select unnest(array[
     'tasks', 'expenses', 'budgets',
     'grocery_items', 'love_notes', 'todos', 'recipes', 'moods',
     'profiles'
   ]) loop
-    begin
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = t
+    ) then
       execute format('alter publication supabase_realtime add table public.%I', t);
-    exception when duplicate_object then
-      -- ya está en la publicación, ignorar
-      null;
-    when undefined_object then
-      -- publicación no existe, crearla
-      execute 'create publication supabase_realtime';
-      execute format('alter publication supabase_realtime add table public.%I', t);
-    end;
+    end if;
   end loop;
 end$$;
 

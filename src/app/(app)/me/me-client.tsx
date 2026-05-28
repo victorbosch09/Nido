@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ListTodo, Wallet, CheckCircle2, type LucideIcon } from "lucide-react";
@@ -50,9 +50,20 @@ export function MeClient({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [score, setScore] = useState<number | null>(todayMood?.score ?? null);
-  const [notes, setNotes] = useState(todayMood?.notes ?? "");
+  const serverScore = todayMood?.score ?? null;
+  const serverNotes = todayMood?.notes ?? "";
+  const [score, setScore] = useState<number | null>(serverScore);
+  const [notes, setNotes] = useState(serverNotes);
   const [saving, setSaving] = useState(false);
+
+  // Re-sincronizar solo cuando el valor real del server cambia (deps primitivas),
+  // así un refresh por cambios del partner en otras tablas no pisa lo que tipeás.
+  useEffect(() => {
+    setScore(serverScore);
+  }, [serverScore]);
+  useEffect(() => {
+    setNotes(serverNotes);
+  }, [serverNotes]);
 
   // 30-day calendar: each cell is a day with a score (or 0 if no data)
   const heatmap = useMemo(() => {

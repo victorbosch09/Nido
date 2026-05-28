@@ -13,7 +13,7 @@ export default async function TasksPage() {
   const [{ data: tasks }, { data: members }] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id, title, description, category, priority, status, due_date, recurrence, assigned_to, completed_at")
+      .select("id, title, description, category, priority, status, due_date, recurrence, assigned_to, completed_at, completed_by")
       .eq("home_id", homeId)
       .order("status")
       .order("due_date", { ascending: true, nullsFirst: false })
@@ -24,13 +24,14 @@ export default async function TasksPage() {
   const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
   const myId = user!.id;
 
-  // Equidad del mes: por cada miembro, cuántas tareas completó este mes.
+  // Equidad del mes: por cada miembro, cuántas tareas COMPLETÓ este mes
+  // (se cuenta a quien la marcó hecha, no a quien estaba asignada).
   const completedThisMonth = (tasks ?? []).filter(
     (t) => t.completed_at && t.completed_at.slice(0, 10) >= monthStart,
   );
   const totalDone = completedThisMonth.length;
   const perMember = (members ?? []).map((m) => {
-    const count = completedThisMonth.filter((t) => t.assigned_to === m.id).length;
+    const count = completedThisMonth.filter((t) => t.completed_by === m.id).length;
     const pct = totalDone > 0 ? Math.round((count / totalDone) * 100) : 0;
     return { ...m, count, pct };
   });

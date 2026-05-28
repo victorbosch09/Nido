@@ -145,6 +145,8 @@ export function GroceriesClient({
             is_done: item.is_done,
             notes: item.notes,
             added_by: item.added_by,
+            done_by: item.done_by,
+            done_at: item.done_at,
           });
           startTransition(() => router.refresh());
         },
@@ -157,7 +159,21 @@ export function GroceriesClient({
     const removed = done;
     setItems((arr) => arr.filter((i) => !i.is_done));
     const supabase = createClient();
-    await supabase.from("grocery_items").delete().eq("is_done", true);
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("home_id")
+      .eq("id", currentUserId)
+      .single();
+    const { error } = await supabase
+      .from("grocery_items")
+      .delete()
+      .eq("home_id", profile!.home_id)
+      .eq("is_done", true);
+    if (error) {
+      setItems((arr) => [...removed, ...arr]);
+      toast.error("No se pudo vaciar");
+      return;
+    }
     toast({
       title: `${removed.length} ${removed.length === 1 ? "item" : "items"} retirados`,
     });
