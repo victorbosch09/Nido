@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X, Search } from "lucide-react";
+import { addDays, addWeeks, addMonths, format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/components/toast";
 import { Segmented } from "@/components/segmented";
@@ -36,11 +37,22 @@ function getCategoryIcon(category: string) {
 
 type Filter = "all" | "mine" | "pending" | "done";
 
+function advanceDate(date: string, recurrence: Task["recurrence"]): string {
+  const d = new Date(date + "T00:00:00");
+  const next =
+    recurrence === "daily" ? addDays(d, 1)
+    : recurrence === "weekly" ? addWeeks(d, 1)
+    : recurrence === "monthly" ? addMonths(d, 1)
+    : d;
+  return format(next, "yyyy-MM-dd");
+}
+
 export function TaskList({
   tasks: serverTasks,
   members,
   currentUserId,
-}: { tasks: Task[]; members: Member[]; currentUserId: string }) {
+  homeId,
+}: { tasks: Task[]; members: Member[]; currentUserId: string; homeId: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [tasks, setTasks] = useState<Task[]>(serverTasks);
@@ -97,6 +109,29 @@ export function TaskList({
       toast.error("No se pudo actualizar");
       return;
     }
+
+    // Tareas recurrentes: al completarlas, crear la próxima ocurrencia.
+    if (newStatus === "done" && task.recurrence !== "once") {
+      const base = task.due_date ?? format(new Date(), "yyyy-MM-dd");
+      const nextDue = advanceDate(base, task.recurrence);
+      const { error: recErr } = await supabase.from("tasks").insert({
+        home_id: homeId,
+        title: task.title,
+        description: task.description,
+        category: task.category,
+        priority: task.priority,
+        recurrence: task.recurrence,
+        assigned_to: task.assigned_to,
+        due_date: nextDue,
+        status: "pending",
+      });
+      if (!recErr) {
+        toast.success("Tarea completada", {
+          description: `Se repite ${{ daily: "mañana", weekly: "la semana próxima", monthly: "el mes próximo" }[task.recurrence]}`,
+        });
+      }
+    }
+
     startTransition(() => router.refresh());
   }
 

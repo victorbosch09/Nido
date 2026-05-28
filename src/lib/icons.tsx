@@ -15,6 +15,7 @@ import {
   Pill,
   Droplet,
   UtensilsCrossed,
+  Boxes,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +55,7 @@ export const SECTION_ICON = {
   tasks: ListTodo,
   budget: Wallet,
   groceries: ShoppingCart,
+  inventory: Boxes,
   kitchen: Utensils,
   pending: Wrench,
   couple: Heart,

@@ -13,6 +13,8 @@ type Table =
   | "todos"
   | "recipes"
   | "moods"
+  | "pantry_items"
+  | "pantry_movements"
   | "profiles"
   | "homes";
 

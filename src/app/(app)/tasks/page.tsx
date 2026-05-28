@@ -91,7 +91,7 @@ export default async function TasksPage() {
         )}
       </div>
 
-      <TaskList tasks={tasks ?? []} members={members ?? []} currentUserId={myId} />
+      <TaskList tasks={tasks ?? []} members={members ?? []} currentUserId={myId} homeId={homeId} />
     </div>
   );
 }
