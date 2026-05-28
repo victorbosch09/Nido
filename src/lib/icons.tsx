@@ -16,6 +16,8 @@ import {
   Droplet,
   UtensilsCrossed,
   Boxes,
+  CalendarDays,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,11 +55,13 @@ export const CATEGORY_ICON: Record<IconName, LucideIcon> = {
 export const SECTION_ICON = {
   dashboard: Home,
   tasks: ListTodo,
+  routine: CalendarDays,
   budget: Wallet,
   groceries: ShoppingCart,
   inventory: Boxes,
   kitchen: Utensils,
   pending: Wrench,
+  rules: Handshake,
   couple: Heart,
   me: User,
 } satisfies Record<string, LucideIcon>;

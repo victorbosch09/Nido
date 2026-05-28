@@ -14,6 +14,10 @@ const REALTIME_TABLES = [
   "moods",
   "pantry_items",
   "pantry_movements",
+  "chore_schedule",
+  "chore_logs",
+  "rules",
+  "rule_logs",
   "profiles",
 ] as const;
 
