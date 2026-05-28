@@ -3,11 +3,12 @@
 import { useState, useTransition, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Clock, Users, Utensils, ChevronDown, ChevronUp, Search, ChefHat } from "lucide-react";
+import { Plus, X, Clock, Users, Utensils, ChevronDown, ChevronUp, Search, ChefHat, CookingPot } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/components/toast";
+import { formatCurrency } from "@/lib/utils";
 
 type Recipe = {
   id: string;
@@ -21,11 +22,29 @@ type Recipe = {
   last_cooked_at: string | null;
 };
 
-export function KitchenClient({ recipes: serverRecipes }: { recipes: Recipe[] }) {
+type PantryItem = {
+  id: string;
+  name: string;
+  unit: string | null;
+  quantity: number;
+  unit_cost: number;
+  is_bulk: boolean;
+};
+
+export function KitchenClient({
+  recipes: serverRecipes,
+  pantryItems,
+  currentUserId,
+}: {
+  recipes: Recipe[];
+  pantryItems: PantryItem[];
+  currentUserId: string;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [recipes, setRecipes] = useState<Recipe[]>(serverRecipes);
   const [showForm, setShowForm] = useState(false);
+  const [cookFor, setCookFor] = useState<{ title: string; recipeId: string | null } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
@@ -147,7 +166,17 @@ export function KitchenClient({ recipes: serverRecipes }: { recipes: Recipe[] })
           />
         </div>
         <button
-          onClick={() => setShowForm((s) => !s)}
+          onClick={() => {
+            setCookFor(cookFor ? null : { title: "", recipeId: null });
+            setShowForm(false);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-accent-secondary text-accent-secondary px-4 py-2.5 text-sm font-medium"
+        >
+          <CookingPot className="w-4 h-4" />
+          Cocinar
+        </button>
+        <button
+          onClick={() => { setShowForm((s) => !s); setCookFor(null); }}
           className="inline-flex items-center gap-1.5 rounded-full bg-accent-primary text-bg-card px-5 py-2.5 text-sm font-medium shadow-warm"
         >
           <Plus className="w-4 h-4" />
@@ -156,6 +185,26 @@ export function KitchenClient({ recipes: serverRecipes }: { recipes: Recipe[] })
       </div>
 
       <AnimatePresence>
+        {cookFor && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <CookSessionForm
+              pantryItems={pantryItems}
+              currentUserId={currentUserId}
+              initialTitle={cookFor.title}
+              recipeId={cookFor.recipeId}
+              onDone={() => {
+                setCookFor(null);
+                startTransition(() => router.refresh());
+              }}
+            />
+          </motion.div>
+        )}
         {showForm && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
@@ -281,18 +330,31 @@ export function KitchenClient({ recipes: serverRecipes }: { recipes: Recipe[] })
                         </div>
                         <div className="px-4 pb-4 flex gap-2 flex-wrap">
                           <button
-                            onClick={() => markCooked(r)}
+                            onClick={() => {
+                              setCookFor({ title: r.title, recipeId: r.id });
+                              setShowForm(false);
+                              markCooked(r);
+                              setExpanded(null);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
                             className="inline-flex items-center gap-1.5 rounded-full bg-accent-secondary text-bg-card px-4 py-2 text-sm font-medium shadow-warm"
                           >
+                            <CookingPot className="w-4 h-4" />
+                            Cocinar y descontar
+                          </button>
+                          <button
+                            onClick={() => markCooked(r)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-main px-4 py-2 text-sm text-ink-muted"
+                          >
                             <ChefHat className="w-4 h-4" />
-                            Cocinada hoy
+                            Solo marcar cocinada
                           </button>
                           <button
                             onClick={() => addIngredientsToList(r)}
                             className="inline-flex items-center gap-1.5 rounded-full border border-line bg-bg-main px-4 py-2 text-sm text-ink-muted"
                           >
                             <Plus className="w-4 h-4" />
-                            Ingredientes a despensa
+                            Ingredientes a lista
                           </button>
                         </div>
                       </motion.div>
@@ -305,6 +367,191 @@ export function KitchenClient({ recipes: serverRecipes }: { recipes: Recipe[] })
         </ul>
       )}
     </div>
+  );
+}
+
+type CookLine = { itemId: string; amount: string };
+
+function CookSessionForm({
+  pantryItems,
+  currentUserId,
+  initialTitle,
+  recipeId,
+  onDone,
+}: {
+  pantryItems: PantryItem[];
+  currentUserId: string;
+  initialTitle: string;
+  recipeId: string | null;
+  onDone: () => void;
+}) {
+  const [title, setTitle] = useState(initialTitle);
+  const [lines, setLines] = useState<CookLine[]>([{ itemId: "", amount: "" }]);
+  const [loading, setLoading] = useState(false);
+
+  const itemById = useMemo(
+    () => Object.fromEntries(pantryItems.map((i) => [i.id, i])),
+    [pantryItems],
+  );
+
+  function lineCost(l: CookLine): number {
+    const item = itemById[l.itemId];
+    const amt = Number(l.amount) || 0;
+    if (!item) return 0;
+    return item.is_bulk
+      ? (amt / 100) * Number(item.unit_cost)
+      : amt * Number(item.unit_cost);
+  }
+  const total = lines.reduce((s, l) => s + lineCost(l), 0);
+
+  function update(i: number, patch: Partial<CookLine>) {
+    setLines((arr) => arr.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const valid = lines.filter((l) => l.itemId && Number(l.amount) > 0);
+    if (valid.length === 0) {
+      toast.error("Elegí al menos un ingrediente");
+      return;
+    }
+    setLoading(true);
+    const supabase = createClient();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("home_id")
+      .eq("id", currentUserId)
+      .single();
+    const homeId = profile!.home_id;
+    const note = title.trim() || "Cocción";
+
+    for (const l of valid) {
+      const item = itemById[l.itemId];
+      if (!item) continue;
+      const amt = Number(l.amount);
+      const newQty = Math.max(0, Number(item.quantity) - amt);
+      await supabase
+        .from("pantry_items")
+        .update({ quantity: newQty, updated_at: new Date().toISOString() })
+        .eq("id", item.id);
+      await supabase.from("pantry_movements").insert({
+        home_id: homeId,
+        item_id: item.id,
+        item_name: item.name,
+        type: "consumption",
+        quantity: amt,
+        unit: item.is_bulk ? "%" : item.unit,
+        unit_cost: item.unit_cost,
+        total_cost: Number(lineCost(l).toFixed(2)),
+        recipe_id: recipeId,
+        note,
+        created_by: currentUserId,
+      });
+    }
+
+    setLoading(false);
+    toast.success("Cocción registrada", {
+      description: `${valid.length} ${valid.length === 1 ? "ingrediente" : "ingredientes"} · costó ${formatCurrency(total)}`,
+    });
+    onDone();
+  }
+
+  if (pantryItems.length === 0) {
+    return (
+      <div className="p-4 rounded-2xl bg-bg-main border border-line text-center">
+        <p className="text-sm text-ink-muted">
+          No hay nada en el inventario todavía. Registrá una compra en Inventario primero.
+        </p>
+        <button onClick={onDone} className="mt-3 text-sm text-accent-primary font-medium">
+          Cerrar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3 p-4 rounded-2xl bg-bg-main border border-line">
+      <label className="block">
+        <span className="text-xs text-ink-muted">¿Qué cocinaste? (ej: batch lun-mié)</span>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Comida de la semana"
+          className="mt-1 w-full rounded-xl border border-line bg-bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+        />
+      </label>
+
+      <p className="text-xs uppercase tracking-wider text-ink-muted">Ingredientes usados</p>
+      <div className="space-y-2">
+        {lines.map((l, i) => {
+          const item = itemById[l.itemId];
+          return (
+            <div key={i} className="flex items-center gap-2">
+              <select
+                value={l.itemId}
+                onChange={(e) => update(i, { itemId: e.target.value })}
+                className="flex-1 min-w-0 rounded-xl border border-line bg-bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+              >
+                <option value="">Elegir del inventario…</option>
+                {pantryItems.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.is_bulk ? `${Number(p.quantity)}%` : `${Number(p.quantity)}${p.unit ? " " + p.unit : ""}`})
+                  </option>
+                ))}
+              </select>
+              <div className="relative w-24 shrink-0">
+                <input
+                  type="number" step="0.01" min="0" inputMode="decimal"
+                  value={l.amount}
+                  onChange={(e) => update(i, { amount: e.target.value })}
+                  placeholder={item?.is_bulk ? "%" : "cant."}
+                  className="w-full rounded-xl border border-line bg-bg-card px-2 py-2 text-sm font-mono text-right focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                />
+                {item && (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-muted pointer-events-none">
+                    {item.is_bulk ? "%" : item.unit ?? ""}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setLines((arr) => (arr.length === 1 ? arr : arr.filter((_, idx) => idx !== i)))}
+                className="text-ink-muted hover:text-accent-primary shrink-0"
+                aria-label="Quitar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => setLines((arr) => [...arr, { itemId: "", amount: "" }])}
+        className="inline-flex items-center gap-1.5 text-sm text-accent-primary font-medium"
+      >
+        <Plus className="w-4 h-4" />
+        Agregar ingrediente
+      </button>
+
+      <div className="flex items-center justify-between pt-2 border-t border-line">
+        <span className="text-sm text-ink-muted">Costo de esta cocción</span>
+        <span className="font-mono font-medium text-lg">{formatCurrency(total)}</span>
+      </div>
+
+      <div className="flex gap-2">
+        <button type="button" onClick={onDone} className="rounded-full border border-line bg-bg-card px-5 py-2 text-sm">
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex-1 rounded-full bg-accent-secondary text-bg-card font-medium py-2 text-sm disabled:opacity-50"
+        >
+          {loading ? "Registrando…" : "Registrar y descontar"}
+        </button>
+      </div>
+    </form>
   );
 }
 

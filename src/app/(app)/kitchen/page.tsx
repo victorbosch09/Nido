@@ -12,19 +12,30 @@ export default async function KitchenPage() {
     .single();
   const homeId = profile!.home_id as string;
 
-  const { data: recipes } = await supabase
-    .from("recipes")
-    .select("id, title, prep_minutes, servings, ingredients, steps, tags, created_at, last_cooked_at")
-    .eq("home_id", homeId)
-    .order("created_at", { ascending: false });
+  const [{ data: recipes }, { data: pantryItems }] = await Promise.all([
+    supabase
+      .from("recipes")
+      .select("id, title, prep_minutes, servings, ingredients, steps, tags, created_at, last_cooked_at")
+      .eq("home_id", homeId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("pantry_items")
+      .select("id, name, unit, quantity, unit_cost, is_bulk")
+      .eq("home_id", homeId)
+      .order("name", { ascending: true }),
+  ]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Cocina"
-        subtitle="Recetas favoritas — los platos que valen la pena recordar."
+        subtitle="Recetas y cocción — registrá lo que cocinás y descontá del inventario."
       />
-      <KitchenClient recipes={recipes ?? []} />
+      <KitchenClient
+        recipes={recipes ?? []}
+        pantryItems={pantryItems ?? []}
+        currentUserId={user!.id}
+      />
     </div>
   );
 }

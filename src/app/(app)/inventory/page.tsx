@@ -18,7 +18,7 @@ export default async function InventoryPage() {
   const [{ data: items }, { data: movements }] = await Promise.all([
     supabase
       .from("pantry_items")
-      .select("id, name, category, unit, quantity, unit_cost, updated_at")
+      .select("id, name, category, unit, quantity, unit_cost, is_bulk, updated_at")
       .eq("home_id", homeId)
       .order("name", { ascending: true }),
     supabase
